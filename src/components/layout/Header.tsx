@@ -6,7 +6,7 @@ const Header = () => {
 
     return (
         <header className="fixed top-0 left-0 right-0 h-16 bg-white border-b border-gray-100 z-10">
-            <div className="flex justify-between items-center h-full px-4 max-w-md mx-auto">
+            <div className="flex justify-between items-center h-full px-4 md:px-8 max-w-md md:max-w-7xl mx-auto">
                 <div className="flex items-center space-x-2">
                     {/* Logo Placeholder - Could be an image later */}
                     <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center text-white font-bold">
