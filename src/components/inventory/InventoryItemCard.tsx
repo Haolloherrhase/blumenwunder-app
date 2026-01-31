@@ -11,7 +11,6 @@ interface InventoryItemCardProps {
     categoryName?: string;
     onUpdateQuantity: (newQuantity: number) => void;
     onDelete?: () => void;
-    isMaterial?: boolean;
 }
 
 const InventoryItemCard: React.FC<InventoryItemCardProps> = ({
@@ -20,8 +19,7 @@ const InventoryItemCard: React.FC<InventoryItemCardProps> = ({
     unitPrice,
     categoryName,
     onUpdateQuantity,
-    onDelete,
-    isMaterial
+    onDelete
 }) => {
     return (
         <Card className="bg-white p-4">
