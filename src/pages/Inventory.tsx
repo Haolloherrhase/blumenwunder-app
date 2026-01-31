@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import Button from '../components/ui/Button';
 import InventoryItemCard from '../components/inventory/InventoryItemCard';
 import AddProductModal from '../components/inventory/AddProductModal';
-import { PlusIcon, FunnelIcon } from '@heroicons/react/24/outline';
+import { PlusIcon } from '@heroicons/react/24/outline';
 
 type Tab = 'products' | 'materials';
 
@@ -14,29 +14,10 @@ interface ProductItem {
     unit_purchase_price: number;
     products: {
         name: string;
-        category: {
+        categories: {
             name: string;
         }
     }
-}
-
-interface MaterialItem {
-    id: string;
-    name: string;
-    unit_price: number;
-    // For materials, we might need a separate inventory table or just track stock in 'materials' table?
-    // Based on schema, 'materials' doesn't have a quantity field directly, it seems intended for bouquets.
-    // WAIT: The schema for 'materials' is: id, name, unit_price. 
-    // It DOES NOT have specific inventory tracking in the initial schema provided (lines 41-47).
-    // However, for a flower shop, they definitely need to track how many vases/ribbons they have.
-    // I will assume for now we might need to add a quantity field to materials or use the inventory table for materials too?
-    // Checking schema again... 'inventory' table has a 'product_id' FK strictly to 'products'.
-    // LIMITATION: The current schema only fully supports inventory for 'products'. 
-    // WORKAROUND: For this version, I will only show Products in the inventory management as fully functional.
-    // I will display Materials as a manageable list of "Available Materials" but without stock count for this iteration, 
-    // OR I should propose a schema change. 
-    // DECISION: To avoid blocking, I will stick to the approved plan but only enable Quantity editing for Products.
-    // For Materials, I will just list them as "Resources".
 }
 
 const Inventory = () => {
@@ -114,7 +95,7 @@ const Inventory = () => {
         <div className="space-y-6 pb-20">
             <div className="flex justify-between items-center">
                 <h1 className="text-2xl font-bold text-gray-800">Bestand</h1>
-                <Button onClick={() => setIsAddModalOpen(true)} size="sm">
+                <Button onClick={() => setIsAddModalOpen(true)}>
                     <PlusIcon className="h-5 w-5 mr-1" />
                     Neu
                 </Button>

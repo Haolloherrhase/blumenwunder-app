@@ -1,6 +1,6 @@
 import React from 'react';
 import { PlusIcon, MinusIcon, TrashIcon } from '@heroicons/react/24/outline';
-import Button from '../ui/Button';
+
 import Card from '../ui/Card';
 
 interface InventoryItemCardProps {

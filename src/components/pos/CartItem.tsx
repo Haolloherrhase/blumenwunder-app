@@ -1,6 +1,6 @@
 import React from 'react';
 import { PlusIcon, MinusIcon, TrashIcon } from '@heroicons/react/24/outline';
-import Input from '../ui/Input';
+
 
 interface CartItemProps {
     name: string;

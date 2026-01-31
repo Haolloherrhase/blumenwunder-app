@@ -12,7 +12,7 @@ interface InventoryProduct {
     quantity: number;
     products: {
         name: string;
-        category: {
+        categories: {
             name: string;
         }
     }
@@ -36,7 +36,7 @@ const Sale = () => {
     // Fetch Inventory
     const fetchInventory = async () => {
         setLoading(true);
-        const { data, error } = await supabase
+        const { data } = await supabase
             .from('inventory')
             .select(`
                 id,
@@ -122,7 +122,7 @@ const Sale = () => {
                 // We fetch current qty first to be safe, or relies on database constraints
 
                 // Simple decrementer:
-                // Fetch current first to avoid negative? 
+                // Fetch current first to avoid negative?
                 // We trust the UI for now for speed.
 
                 // Let's call rpc if we had one, otherwise:
@@ -178,7 +178,7 @@ const Sale = () => {
                                 <ProductSelectionCard
                                     key={item.id}
                                     name={item.products.name}
-                                    category={item.products.categories?.name}
+                                    category={item.products.categories.name}
                                     stock={item.quantity}
                                     onClick={() => addToCart(item)}
                                 />
