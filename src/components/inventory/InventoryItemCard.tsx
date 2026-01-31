@@ -42,7 +42,7 @@ const InventoryItemCard: React.FC<InventoryItemCardProps> = ({
 
             <div className="flex items-center justify-between bg-neutral-bg rounded-lg p-2">
                 <span className={`text-sm font-medium ${quantity < 10 ? 'text-red-600' : 'text-gray-600'}`}>
-                    {quantity} {isMaterial ? 'Stk.' : 'Stiele'}
+                    {quantity} Stück
                 </span>
                 <div className="flex items-center space-x-2">
                     <button
