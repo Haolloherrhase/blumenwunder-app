@@ -66,11 +66,14 @@ const BouquetBuilder: React.FC<BouquetBuilderProps> = ({ templateId, onSave, onC
         if (productsData) {
             const prods = productsData
                 .filter(item => item.products)
-                .map(item => ({
-                    id: item.products.id,
-                    name: item.products.name,
-                    unit_purchase_price: item.unit_purchase_price || 0
-                }));
+                .map(item => {
+                    const product = Array.isArray(item.products) ? item.products[0] : item.products;
+                    return {
+                        id: product.id,
+                        name: product.name,
+                        unit_purchase_price: item.unit_purchase_price || 0
+                    };
+                });
             setProducts(prods);
         }
 
