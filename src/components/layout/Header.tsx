@@ -1,9 +1,8 @@
-import React from 'react';
 import { UserCircleIcon, ArrowRightOnRectangleIcon } from '@heroicons/react/24/outline';
 import { useAuth } from '../../contexts/AuthContext';
 
 const Header = () => {
-    const { user, signOut } = useAuth();
+    const { signOut } = useAuth();
 
     return (
         <header className="fixed top-0 left-0 right-0 h-16 bg-white border-b border-gray-100 z-10">
