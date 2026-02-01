@@ -3,6 +3,7 @@ import { supabase } from '../../lib/supabase';
 import Card from '../ui/Card';
 import Button from '../ui/Button';
 import { PencilIcon, TrashIcon } from '@heroicons/react/24/outline';
+import ProduceBouquetModal from './ProduceBouquetModal';
 
 interface BouquetTemplate {
     id: string;
@@ -20,6 +21,8 @@ interface BouquetListProps {
 const BouquetList: React.FC<BouquetListProps> = ({ onEdit, onNew }) => {
     const [templates, setTemplates] = useState<BouquetTemplate[]>([]);
     const [loading, setLoading] = useState(true);
+    const [isProduceModalOpen, setIsProduceModalOpen] = useState(false);
+    const [selectedTemplate, setSelectedTemplate] = useState<BouquetTemplate | null>(null);
 
     useEffect(() => {
         fetchTemplates();
@@ -113,14 +116,37 @@ const BouquetList: React.FC<BouquetListProps> = ({ onEdit, onNew }) => {
                                     <span className="text-sm text-gray-500">
                                         {template.ingredient_count} Zutaten
                                     </span>
-                                    <span className="text-lg font-bold text-primary">
-                                        {new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(template.base_price)}
-                                    </span>
+                                    <div className="flex items-center space-x-3">
+                                        <span className="text-lg font-bold text-primary">
+                                            {new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(template.base_price)}
+                                        </span>
+                                        <button
+                                            onClick={() => {
+                                                setSelectedTemplate(template);
+                                                setIsProduceModalOpen(true);
+                                            }}
+                                            className="bg-primary/10 text-primary hover:bg-primary hover:text-white px-3 py-1 rounded-lg text-xs font-semibold transition-all"
+                                        >
+                                            Produzieren
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         </Card>
                     ))}
                 </div>
+            )}
+
+            {selectedTemplate && (
+                <ProduceBouquetModal
+                    isOpen={isProduceModalOpen}
+                    onClose={() => {
+                        setIsProduceModalOpen(false);
+                        setSelectedTemplate(null);
+                    }}
+                    template={selectedTemplate}
+                    onSuccess={fetchTemplates}
+                />
             )}
         </div>
     );
