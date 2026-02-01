@@ -151,7 +151,7 @@ const Sale = () => {
             for (const item of cart) {
                 if (item.isQuickBouquet && item.ingredients) {
                     // 1. Transaction log for the whole bouquet (Sale)
-                    const { data: bouquetTrans, error: btError } = await supabase
+                    const { error: btError } = await supabase
                         .from('transactions')
                         .insert({
                             user_id: user?.id,

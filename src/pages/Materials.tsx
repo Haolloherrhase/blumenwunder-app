@@ -25,7 +25,7 @@ const Materials = () => {
 
     const fetchMaterials = async () => {
         setLoading(true);
-        const { data, error } = await supabase
+        const { data } = await supabase
             .from('materials')
             .select('*')
             .order('name');
