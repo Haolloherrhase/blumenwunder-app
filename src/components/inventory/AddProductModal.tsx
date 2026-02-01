@@ -72,7 +72,8 @@ const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClose, onSu
                     .from('materials')
                     .insert({
                         name,
-                        unit_price: Number(unitPrice) || 0
+                        unit_price: Number(unitPrice) || 0,
+                        vat_rate: vatRate
                     });
 
                 if (error) throw error;
@@ -154,8 +155,8 @@ const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClose, onSu
                                     type="button"
                                     onClick={() => setVatRate(rate)}
                                     className={`flex-1 py-2 px-3 rounded-lg border text-sm font-medium transition-all ${vatRate === rate
-                                            ? 'bg-primary/10 border-primary text-primary'
-                                            : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                                        ? 'bg-primary/10 border-primary text-primary'
+                                        : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
                                         }`}
                                 >
                                     {rate}%

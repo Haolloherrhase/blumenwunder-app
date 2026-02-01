@@ -81,6 +81,7 @@ const Sale = () => {
                     products (
                         name,
                         is_bouquet,
+                        vat_rate,
                         categories (name)
                     )
                 `)
@@ -98,6 +99,7 @@ const Sale = () => {
                     products (
                         name,
                         is_bouquet,
+                        vat_rate,
                         categories (name)
                     )
                 `)
@@ -188,12 +190,12 @@ const Sale = () => {
                 inventoryId: item.isTemplate ? undefined : item.id,
                 templateId: item.isTemplate ? item.id : undefined,
                 productId: item.isTemplate ? undefined : item.product_id,
-                name: item.isTemplate ? item.name! : item.products!.name,
+                name: item.isTemplate ? item.name! : (item.products?.name || 'Unbekannt'),
                 quantity: 1,
                 price: item.unit_price || 5.00,
                 isBouquet: true,
                 isTemplate: item.isTemplate,
-                vatRate: item.isTemplate ? 7 : (item.products?.vat_rate || 7), // Default 7% for bouquets
+                vatRate: item.isTemplate ? 7 : (item.products?.vat_rate || 7),
                 ingredients: item.isTemplate ? (item.ingredients as any) : undefined
             }];
         });
@@ -229,14 +231,12 @@ const Sale = () => {
         setProcessing(true);
 
         try {
-            // Flatten quick bouquets to ingredients + handles bundles
             for (const item of cart) {
-                const totalGross = item.price * item.quantity;
-                const vatRate = item.vatRate || 7;
-                const vatAmount = totalGross - (totalGross / (1 + vatRate / 100));
+                const totalGross = Number(item.price) * Number(item.quantity);
+                const vatRateSelected = Number(item.vatRate) || 7;
+                const vatAmountCalculated = totalGross - (totalGross / (1 + vatRateSelected / 100));
 
                 if ((item.isQuickBouquet || item.isTemplate) && item.ingredients) {
-                    // 1. Transaction log for the whole bouquet (Sale)
                     const { error: btError } = await supabase
                         .from('transactions')
                         .insert({
@@ -246,21 +246,20 @@ const Sale = () => {
                             unit_price: item.price,
                             total_price: totalGross,
                             payment_method: paymentMethod,
-                            vat_rate: vatRate,
-                            vat_amount: vatAmount,
+                            vat_rate: vatRateSelected,
+                            vat_amount: vatAmountCalculated,
                             notes: `${item.isTemplate ? 'Vorlage' : 'Schnell-Strauß'}: ${item.name}`
                         });
 
                     if (btError) throw btError;
 
-                    // 2. Deduct each product ingredient and log usage
                     for (const ing of item.ingredients) {
-                        if (ing.type === 'product') {
-                            // Find relevant inventory entry for this product
+                        const ingProductId = (ing as any).product_id || ing.productId;
+                        if (ing.type === 'product' && ingProductId) {
                             const { data: currentInv } = await supabase
                                 .from('inventory')
                                 .select('id, quantity')
-                                .eq('product_id', ing.productId || (ing as any).product_id)
+                                .eq('product_id', ingProductId)
                                 .maybeSingle();
 
                             if (currentInv) {
@@ -271,7 +270,7 @@ const Sale = () => {
 
                                 await supabase.from('transactions').insert({
                                     user_id: user?.id,
-                                    product_id: ing.productId || (ing as any).product_id,
+                                    product_id: ingProductId,
                                     transaction_type: 'usage',
                                     quantity: ing.quantity * item.quantity,
                                     unit_price: 0,
@@ -282,8 +281,7 @@ const Sale = () => {
                         }
                     }
                 } else if (item.inventoryId) {
-                    // Regular item sale or produced bouquet sale
-                    await supabase.from('transactions').insert({
+                    const { error: sError } = await supabase.from('transactions').insert({
                         user_id: user?.id,
                         product_id: item.productId,
                         transaction_type: 'sale',
@@ -291,9 +289,11 @@ const Sale = () => {
                         unit_price: item.price,
                         total_price: totalGross,
                         payment_method: paymentMethod,
-                        vat_rate: vatRate,
-                        vat_amount: vatAmount
+                        vat_rate: vatRateSelected,
+                        vat_amount: vatAmountCalculated
                     });
+
+                    if (sError) throw sError;
 
                     const { data: currentInv } = await supabase
                         .from('inventory')
@@ -378,7 +378,7 @@ const Sale = () => {
                             {displayProducts.map(item => (
                                 <ProductSelectionCard
                                     key={item.isTemplate ? `temp-${item.id}` : item.id}
-                                    name={item.isTemplate ? item.name! : item.products!.name}
+                                    name={item.isTemplate ? (item.name || 'Unbenannt') : (item.products?.name || 'Unbenannt')}
                                     category={item.isTemplate ? 'Vorlage' : (item.products?.categories?.name || 'Strauß')}
                                     stock={item.quantity}
                                     onClick={() => addToCart(item)}
