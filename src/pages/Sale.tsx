@@ -7,11 +7,12 @@ import CartItem from '../components/pos/CartItem';
 import { ArchiveBoxXMarkIcon } from '@heroicons/react/24/outline';
 
 interface InventoryProduct {
-    id: string; // Inventory ID
+    id: string;
     product_id: string;
     quantity: number;
     products: {
         name: string;
+        is_bouquet: boolean;
         categories: {
             name: string;
         }
@@ -23,12 +24,15 @@ interface CartEntry {
     productId: string;
     name: string;
     quantity: number;
-    price: number; // Unit price for this sale
+    price: number;
+    isBouquet: boolean;
 }
 
 const Sale = () => {
     const { user } = useAuth();
+    const [activeTab, setActiveTab] = useState<'single' | 'bouquet'>('single');
     const [products, setProducts] = useState<InventoryProduct[]>([]);
+    const [bouquets, setBouquets] = useState<InventoryProduct[]>([]);
     const [cart, setCart] = useState<CartEntry[]>([]);
     const [loading, setLoading] = useState(true);
     const [processing, setProcessing] = useState(false);
@@ -36,23 +40,44 @@ const Sale = () => {
     // Fetch Inventory
     const fetchInventory = async () => {
         setLoading(true);
-        const { data } = await supabase
+
+        // Regular products (not bouquets)
+        const { data: regularData } = await supabase
             .from('inventory')
             .select(`
                 id,
                 quantity,
                 product_id,
-                products (
+                products!inner (
                     name,
+                    is_bouquet,
                     categories (name)
                 )
             `)
-            .gt('quantity', 0) // Only show items in stock
+            .eq('products.is_bouquet', false)
+            .gt('quantity', 0)
             .order('quantity', { ascending: false });
 
-        if (data) {
-            setProducts(data as any);
-        }
+        // Bouquets
+        const { data: bouquetData } = await supabase
+            .from('inventory')
+            .select(`
+                id,
+                quantity,
+                product_id,
+                products!inner (
+                    name,
+                    is_bouquet,
+                    categories (name)
+                )
+            `)
+            .eq('products.is_bouquet', true)
+            .gt('quantity', 0)
+            .order('quantity', { ascending: false });
+
+        if (regularData) setProducts(regularData as any);
+        if (bouquetData) setBouquets(bouquetData as any);
+
         setLoading(false);
     };
 
@@ -74,7 +99,8 @@ const Sale = () => {
                 productId: item.product_id,
                 name: item.products.name,
                 quantity: 1,
-                price: 2.50 // Default dummy price, user should edit
+                price: 5.00, // Default price
+                isBouquet: item.products.is_bouquet
             }];
         });
     };
@@ -97,7 +123,6 @@ const Sale = () => {
         setProcessing(true);
 
         try {
-            // 1. Create Transactions
             const transactions = cart.map(item => ({
                 user_id: user?.id,
                 product_id: item.productId,
@@ -105,7 +130,7 @@ const Sale = () => {
                 quantity: item.quantity,
                 unit_price: item.price,
                 total_price: item.price * item.quantity,
-                payment_method: 'cash' // Default for now
+                payment_method: 'cash'
             }));
 
             const { error: transError } = await supabase
@@ -114,20 +139,7 @@ const Sale = () => {
 
             if (transError) throw transError;
 
-            // 2. Update Inventory (Decrement)
-            // Note: In a real app we'd use an RPC for atomicity, but loop is fine for MVP
             for (const item of cart) {
-                // Determine current stock from basic fetch or just decrement safely
-                // We'll use the 'rpc' approach if possible, but standard update is easier here
-                // We fetch current qty first to be safe, or relies on database constraints
-
-                // Simple decrementer:
-                // Fetch current first to avoid negative?
-                // We trust the UI for now for speed.
-
-                // Let's call rpc if we had one, otherwise:
-                // RPC is cleaner: create a decrement function in SQL.
-                // For now: read-modify-write (optimistic locking not implemented)
                 const { data: currentInv } = await supabase
                     .from('inventory')
                     .select('quantity')
@@ -142,10 +154,9 @@ const Sale = () => {
                 }
             }
 
-            // Success
             alert(`Verkauf erfolgreich! Gesamt: ${new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(cartTotal)}`);
             setCart([]);
-            fetchInventory(); // Refresh stock
+            fetchInventory();
 
         } catch (error) {
             console.error('Checkout failed:', error);
@@ -155,30 +166,56 @@ const Sale = () => {
         }
     };
 
+    const displayProducts = activeTab === 'single' ? products : bouquets;
+
     return (
         <div className="flex flex-col h-[calc(100vh-8rem)]">
             <h1 className="text-2xl font-bold text-gray-800 mb-4 shrink-0">Verkauf</h1>
+
+            {/* Tabs */}
+            <div className="flex gap-2 mb-4 shrink-0">
+                <button
+                    onClick={() => setActiveTab('single')}
+                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${activeTab === 'single'
+                            ? 'bg-primary text-white'
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        }`}
+                >
+                    Einzelverkauf
+                </button>
+                <button
+                    onClick={() => setActiveTab('bouquet')}
+                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${activeTab === 'bouquet'
+                            ? 'bg-primary text-white'
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        }`}
+                >
+                    💐 Vorbereitete Sträuße
+                </button>
+            </div>
 
             <div className="flex-1 overflow-hidden flex flex-col md:flex-row gap-4">
                 {/* Product Grid */}
                 <div className="flex-1 overflow-y-auto pr-2">
                     <h2 className="text-sm font-semibold text-gray-500 mb-2 sticky top-0 bg-neutral-bg py-1 z-10">
-                        Verfügbare Artikel
+                        {activeTab === 'single' ? 'Verfügbare Artikel' : 'Vorbereitete Sträuße'}
                     </h2>
                     {loading ? (
                         <p className="text-gray-400 text-sm">Lade Produkte...</p>
-                    ) : products.length === 0 ? (
+                    ) : displayProducts.length === 0 ? (
                         <div className="text-center py-10 bg-white rounded-xl border border-dashed border-gray-300">
                             <ArchiveBoxXMarkIcon className="h-10 w-10 text-gray-300 mx-auto mb-2" />
-                            <p className="text-gray-500">Lager ist leer.</p>
+                            <p className="text-gray-500">
+                                {activeTab === 'single' ? 'Lager ist leer.' : 'Keine vorbereiteten Sträuße vorhanden.'}
+                            </p>
                         </div>
                     ) : (
                         <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
-                            {products.map(item => (
+                            {displayProducts.map(item => (
                                 <ProductSelectionCard
                                     key={item.id}
                                     name={item.products.name}
-                                    category={item.products.categories.name}
+                                    category={item.products.categories?.name || 'Strauß'}
                                     stock={item.quantity}
                                     onClick={() => addToCart(item)}
                                 />
