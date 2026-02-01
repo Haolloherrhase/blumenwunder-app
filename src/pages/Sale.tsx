@@ -116,8 +116,8 @@ const Sale = () => {
                         product_id,
                         material_id,
                         quantity,
-                        products (name),
-                        materials (name)
+                        products (name, vat_rate),
+                        materials (name, vat_rate)
                     )
                 `);
 
@@ -232,6 +232,8 @@ const Sale = () => {
             // Flatten quick bouquets to ingredients + handles bundles
             for (const item of cart) {
                 const totalGross = item.price * item.quantity;
+                const vatRate = item.vatRate || 7;
+                const vatAmount = totalGross - (totalGross / (1 + vatRate / 100));
 
                 if ((item.isQuickBouquet || item.isTemplate) && item.ingredients) {
                     // 1. Transaction log for the whole bouquet (Sale)
@@ -244,6 +246,8 @@ const Sale = () => {
                             unit_price: item.price,
                             total_price: totalGross,
                             payment_method: paymentMethod,
+                            vat_rate: vatRate,
+                            vat_amount: vatAmount,
                             notes: `${item.isTemplate ? 'Vorlage' : 'Schnell-Strauß'}: ${item.name}`
                         });
 
@@ -286,7 +290,9 @@ const Sale = () => {
                         quantity: item.quantity,
                         unit_price: item.price,
                         total_price: totalGross,
-                        payment_method: paymentMethod
+                        payment_method: paymentMethod,
+                        vat_rate: vatRate,
+                        vat_amount: vatAmount
                     });
 
                     const { data: currentInv } = await supabase
