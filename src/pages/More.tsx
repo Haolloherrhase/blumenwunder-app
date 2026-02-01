@@ -156,9 +156,17 @@ const More = () => {
             </Card>
 
             {/* Material-Bibliothek */}
-            <Card title="📦 Material-Bibliothek">
-                <p className="text-gray-500 py-2">Materialien verwalten (Coming Soon)</p>
-            </Card>
+            <div onClick={() => navigate('/materials')} className="cursor-pointer">
+                <Card className="hover:bg-gray-50 transition-colors border-l-4 border-l-primary">
+                    <div className="flex justify-between items-center">
+                        <div>
+                            <h3 className="font-semibold text-gray-900">📦 Material-Bibliothek</h3>
+                            <p className="text-sm text-gray-500">Kordel, Folie und Zubehör verwalten</p>
+                        </div>
+                        <span className="text-gray-400">&rarr;</span>
+                    </div>
+                </Card>
+            </div>
         </div>
     );
 };
