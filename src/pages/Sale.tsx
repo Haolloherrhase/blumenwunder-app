@@ -81,7 +81,6 @@ const Sale = () => {
                     products (
                         name,
                         is_bouquet,
-                        vat_rate,
                         categories (name)
                     )
                 `)
@@ -99,7 +98,6 @@ const Sale = () => {
                     products (
                         name,
                         is_bouquet,
-                        vat_rate,
                         categories (name)
                     )
                 `)
@@ -118,8 +116,8 @@ const Sale = () => {
                         product_id,
                         material_id,
                         quantity,
-                        products (name, vat_rate),
-                        materials (name, vat_rate)
+                        products (name),
+                        materials (name)
                     )
                 `);
 
@@ -234,8 +232,6 @@ const Sale = () => {
             // Flatten quick bouquets to ingredients + handles bundles
             for (const item of cart) {
                 const totalGross = item.price * item.quantity;
-                const vatRate = item.vatRate || 7; // Default to 7% if not specified
-                const vatAmount = totalGross - (totalGross / (1 + vatRate / 100));
 
                 if ((item.isQuickBouquet || item.isTemplate) && item.ingredients) {
                     // 1. Transaction log for the whole bouquet (Sale)
@@ -248,8 +244,6 @@ const Sale = () => {
                             unit_price: item.price,
                             total_price: totalGross,
                             payment_method: paymentMethod,
-                            vat_rate: vatRate,
-                            vat_amount: vatAmount,
                             notes: `${item.isTemplate ? 'Vorlage' : 'Schnell-Strauß'}: ${item.name}`
                         });
 
@@ -292,9 +286,7 @@ const Sale = () => {
                         quantity: item.quantity,
                         unit_price: item.price,
                         total_price: totalGross,
-                        payment_method: paymentMethod,
-                        vat_rate: vatRate,
-                        vat_amount: vatAmount
+                        payment_method: paymentMethod
                     });
 
                     const { data: currentInv } = await supabase

@@ -20,7 +20,6 @@ const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClose, onSu
     const [name, setName] = useState('');
     const [categoryId, setCategoryId] = useState('');
     const [unitPrice, setUnitPrice] = useState('');
-    const [vatRate, setVatRate] = useState<number>(7); // State for VAT
     const [categories, setCategories] = useState<Category[]>([]);
     const [loading, setLoading] = useState(false);
 
@@ -47,8 +46,7 @@ const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClose, onSu
                     .insert({
                         name,
                         category_id: categoryId,
-                        avg_shelf_life_days: 7,
-                        vat_rate: vatRate
+                        avg_shelf_life_days: 7
                     })
                     .select()
                     .single();
@@ -142,27 +140,6 @@ const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClose, onSu
                         placeholder="0.00"
                         required
                     />
-
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                            MwSt-Satz (%)
-                        </label>
-                        <div className="flex gap-4">
-                            {[7, 19].map(rate => (
-                                <button
-                                    key={rate}
-                                    type="button"
-                                    onClick={() => setVatRate(rate)}
-                                    className={`flex-1 py-2 px-3 rounded-lg border text-sm font-medium transition-all ${vatRate === rate
-                                            ? 'bg-primary/10 border-primary text-primary'
-                                            : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
-                                        }`}
-                                >
-                                    {rate}%
-                                </button>
-                            ))}
-                        </div>
-                    </div>
 
                     <div className="pt-2">
                         <Button type="submit" fullWidth disabled={loading}>

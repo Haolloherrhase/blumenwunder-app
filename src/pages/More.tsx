@@ -48,17 +48,10 @@ const More = () => {
                 'Menge',
                 'Einzelpreis (€)',
                 'Gesamt (Brutto €)',
-                'MwSt-Satz (%)',
-                'MwSt-Betrag (€)',
-                'Netto (€)',
                 'Zahlungsart'
             ];
 
             const rows = transactions.map(t => {
-                const vatRate = t.vat_rate || (t.transaction_type === 'sale_bouquet' ? 7 : 19); // Default VAT if not present
-                const vatAmount = t.vat_amount || 0;
-                const netPrice = t.total_price - vatAmount;
-
                 return [
                     new Date(t.created_at).toLocaleDateString('de-DE'),
                     t.products?.name || 'Unbekannt',
@@ -67,9 +60,6 @@ const More = () => {
                     t.quantity,
                     t.unit_price.toFixed(2),
                     t.total_price.toFixed(2),
-                    vatRate,
-                    vatAmount.toFixed(2),
-                    netPrice.toFixed(2),
                     t.payment_method || '-'
                 ];
             });
