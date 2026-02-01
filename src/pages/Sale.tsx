@@ -10,26 +10,38 @@ import QuickBouquetModal from '../components/pos/QuickBouquetModal';
 // ... (remaining imports for interface etc)
 
 interface InventoryProduct {
-    id: string;
-    product_id: string;
+    id?: string; // Optional because templates don't have an inventory entry yet
+    product_id?: string;
     quantity: number;
-    products: {
+    unit_price?: number; // Selling price
+    isTemplate?: boolean;
+    ingredients?: Array<{
+        product_id?: string;
+        material_id?: string;
+        quantity: number;
+        name: string;
+        type: 'product' | 'material';
+    }>;
+    products?: {
         name: string;
         is_bouquet: boolean;
-        categories: {
+        categories?: {
             name: string;
         }
-    }
+    };
+    name?: string; // Fallback for templates
 }
 
 interface CartEntry {
     inventoryId?: string;
     productId?: string;
+    templateId?: string; // NEW
     name: string;
     quantity: number;
     price: number;
     isBouquet: boolean;
     isQuickBouquet?: boolean;
+    isTemplate?: boolean; // NEW
     ingredients?: Array<{
         inventoryId?: string;
         productId?: string;
@@ -50,48 +62,104 @@ const Sale = () => {
     const [processing, setProcessing] = useState(false);
     const [isQuickBouquetModalOpen, setIsQuickBouquetModalOpen] = useState(false);
 
-    // Fetch Inventory
+    // Fetch Inventory & Templates
     const fetchInventory = async () => {
         setLoading(true);
 
-        // Regular products (not bouquets)
-        const { data: regularData } = await supabase
-            .from('inventory')
-            .select(`
-                id,
-                quantity,
-                product_id,
-                products!inner (
+        try {
+            // 1. Regular products
+            const { data: regularData } = await supabase
+                .from('inventory')
+                .select(`
+                    id,
+                    quantity,
+                    product_id,
+                    products (
+                        name,
+                        is_bouquet,
+                        categories (name)
+                    )
+                `)
+                .eq('products.is_bouquet', false)
+                .gt('quantity', 0)
+                .order('quantity', { ascending: false });
+
+            // 2. Produced Bouquets in Stock
+            const { data: bouquetInvData } = await supabase
+                .from('inventory')
+                .select(`
+                    id,
+                    quantity,
+                    product_id,
+                    products (
+                        name,
+                        is_bouquet,
+                        categories (name)
+                    )
+                `)
+                .eq('products.is_bouquet', true)
+                .gt('quantity', 0)
+                .order('quantity', { ascending: false });
+
+            // 3. Bouquet Templates
+            const { data: templateData } = await supabase
+                .from('bouquet_templates')
+                .select(`
+                    id,
                     name,
-                    is_bouquet,
-                    categories (name)
-                )
-            `)
-            .eq('products.is_bouquet', false)
-            .gt('quantity', 0)
-            .order('quantity', { ascending: false });
+                    base_price,
+                    items:bouquet_template_items (
+                        product_id,
+                        material_id,
+                        quantity,
+                        products (name),
+                        materials (name)
+                    )
+                `);
 
-        // Bouquets
-        const { data: bouquetData } = await supabase
-            .from('inventory')
-            .select(`
-                id,
-                quantity,
-                product_id,
-                products!inner (
-                    name,
-                    is_bouquet,
-                    categories (name)
-                )
-            `)
-            .eq('products.is_bouquet', true)
-            .gt('quantity', 0)
-            .order('quantity', { ascending: false });
+            if (regularData) setProducts(regularData as any);
 
-        if (regularData) setProducts(regularData as any);
-        if (bouquetData) setBouquets(bouquetData as any);
+            // Combine produced bouquets and templates
+            const combinedBouquets: InventoryProduct[] = [];
 
-        setLoading(false);
+            // Add produced bouquets first, matching price with templates if possible
+            if (bouquetInvData) {
+                const bouquetStock = (bouquetInvData as any).map((b: any) => {
+                    const matchedTemplate = templateData?.find(t => t.name === b.products.name);
+                    return {
+                        ...b,
+                        unit_price: matchedTemplate ? Number(matchedTemplate.base_price) : 15.00
+                    };
+                });
+                combinedBouquets.push(...bouquetStock);
+            }
+
+            // Add templates
+            if (templateData) {
+                combinedBouquets.push(...templateData.map(t => ({
+                    id: t.id,
+                    name: t.name,
+                    quantity: 99, // Unlimited virtual stock
+                    unit_price: Number(t.base_price),
+                    isTemplate: true,
+                    ingredients: t.items.map((i: any) => ({
+                        product_id: i.product_id,
+                        material_id: i.material_id,
+                        quantity: i.quantity,
+                        name: i.products?.name || i.materials?.name || 'Zutat',
+                        type: (i.product_id ? 'product' : 'material') as 'product' | 'material'
+                    })),
+                    products: { name: t.name, is_bouquet: true }
+                })));
+            }
+
+            setBouquets(combinedBouquets);
+
+        } catch (err) {
+            console.error('Error fetching inventory:', err);
+        } finally {
+            setLoading(false);
+        }
     };
 
     useEffect(() => {
@@ -101,19 +169,26 @@ const Sale = () => {
     // Cart Actions
     const addToCart = (item: InventoryProduct) => {
         setCart(prev => {
-            const existing = prev.find(p => p.inventoryId === item.id);
+            const existing = prev.find(p => (item.isTemplate ? p.templateId === item.id : p.inventoryId === item.id));
+
             if (existing) {
                 return prev.map(p =>
-                    p.inventoryId === item.id ? { ...p, quantity: p.quantity + 1 } : p
+                    (item.isTemplate ? p.templateId === item.id : p.inventoryId === item.id)
+                        ? { ...p, quantity: p.quantity + 1 }
+                        : p
                 );
             }
+
             return [...prev, {
-                inventoryId: item.id,
-                productId: item.product_id,
-                name: item.products.name,
+                inventoryId: item.isTemplate ? undefined : item.id,
+                templateId: item.isTemplate ? item.id : undefined,
+                productId: item.isTemplate ? undefined : item.product_id,
+                name: item.isTemplate ? item.name! : item.products!.name,
                 quantity: 1,
-                price: 5.00, // Default price
-                isBouquet: item.products.is_bouquet
+                price: item.unit_price || 5.00,
+                isBouquet: true,
+                isTemplate: item.isTemplate,
+                ingredients: item.isTemplate ? (item.ingredients as any) : undefined
             }];
         });
     };
@@ -131,12 +206,12 @@ const Sale = () => {
 
     const updateCartItem = (id: string | undefined, index: number, updates: Partial<CartEntry>) => {
         setCart(prev => prev.map((item, i) =>
-            (id && item.inventoryId === id) || (!id && i === index) ? { ...item, ...updates } : item
+            (id && (item.inventoryId === id || item.templateId === id)) || (!id && i === index) ? { ...item, ...updates } : item
         ));
     };
 
     const removeFromCart = (id: string | undefined, index: number) => {
-        setCart(prev => prev.filter((item, i) => id ? item.inventoryId !== id : i !== index));
+        setCart(prev => prev.filter((item, i) => id ? (item.inventoryId !== id && item.templateId !== id) : i !== index));
     };
 
     const cartTotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
@@ -149,43 +224,41 @@ const Sale = () => {
         try {
             // Flatten quick bouquets to ingredients + handles bundles
             for (const item of cart) {
-                if (item.isQuickBouquet && item.ingredients) {
+                if ((item.isQuickBouquet || item.isTemplate) && item.ingredients) {
                     // 1. Transaction log for the whole bouquet (Sale)
                     const { error: btError } = await supabase
                         .from('transactions')
                         .insert({
                             user_id: user?.id,
-                            transaction_type: 'sale_bouquet', // As per PRD
+                            transaction_type: 'sale_bouquet',
                             quantity: item.quantity,
                             unit_price: item.price,
                             total_price: item.price * item.quantity,
                             payment_method: 'cash',
-                            notes: `Schnell-Strauß: ${item.name}`
-                        })
-                        .select()
-                        .single();
+                            notes: `${item.isTemplate ? 'Vorlage' : 'Schnell-Strauß'}: ${item.name}`
+                        });
 
                     if (btError) throw btError;
 
                     // 2. Deduct each product ingredient and log usage
                     for (const ing of item.ingredients) {
-                        if (ing.type === 'product' && ing.inventoryId) {
+                        if (ing.type === 'product') {
+                            // Find relevant inventory entry for this product
                             const { data: currentInv } = await supabase
                                 .from('inventory')
-                                .select('quantity')
-                                .eq('id', ing.inventoryId)
-                                .single();
+                                .select('id, quantity')
+                                .eq('product_id', ing.productId || (ing as any).product_id)
+                                .maybeSingle();
 
                             if (currentInv) {
                                 await supabase
                                     .from('inventory')
                                     .update({ quantity: Math.max(0, currentInv.quantity - (ing.quantity * item.quantity)) })
-                                    .eq('id', ing.inventoryId);
+                                    .eq('id', currentInv.id);
 
-                                // Usage log linked to bouquet sale
                                 await supabase.from('transactions').insert({
                                     user_id: user?.id,
-                                    product_id: ing.productId,
+                                    product_id: ing.productId || (ing as any).product_id,
                                     transaction_type: 'usage',
                                     quantity: ing.quantity * item.quantity,
                                     unit_price: 0,
@@ -195,8 +268,8 @@ const Sale = () => {
                             }
                         }
                     }
-                } else {
-                    // Regular item sale
+                } else if (item.inventoryId) {
+                    // Regular item sale or produced bouquet sale
                     await supabase.from('transactions').insert({
                         user_id: user?.id,
                         product_id: item.productId,
@@ -289,9 +362,9 @@ const Sale = () => {
                         <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
                             {displayProducts.map(item => (
                                 <ProductSelectionCard
-                                    key={item.id}
-                                    name={item.products.name}
-                                    category={item.products.categories?.name || 'Strauß'}
+                                    key={item.isTemplate ? `temp-${item.id}` : item.id}
+                                    name={item.isTemplate ? item.name! : item.products!.name}
+                                    category={item.isTemplate ? 'Vorlage' : (item.products?.categories?.name || 'Strauß')}
                                     stock={item.quantity}
                                     onClick={() => addToCart(item)}
                                 />
