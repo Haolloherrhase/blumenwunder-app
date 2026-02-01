@@ -3,8 +3,10 @@ import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import { supabase } from '../lib/supabase';
 import { ArrowDownTrayIcon } from '@heroicons/react/24/outline';
+import { useNavigate } from 'react-router-dom';
 
 const More = () => {
+    const navigate = useNavigate();
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
     const [exporting, setExporting] = useState(false);
@@ -91,6 +93,21 @@ const More = () => {
     return (
         <div className="space-y-6">
             <h1 className="text-2xl font-bold text-gray-800">Mehr</h1>
+
+            {/* Dashboard Actions / Shortcuts */}
+            <div className="grid grid-cols-1 gap-4">
+                <div onClick={() => navigate('/waste')} className="cursor-pointer">
+                    <Card className="hover:bg-gray-50 transition-colors border-l-4 border-l-red-400">
+                        <div className="flex justify-between items-center">
+                            <div>
+                                <h3 className="font-semibold text-gray-900">Schwund & Abgang</h3>
+                                <p className="text-sm text-gray-500">Müll, Geschenke oder Eigenverbrauch buchen</p>
+                            </div>
+                            <span className="text-gray-400">&rarr;</span>
+                        </div>
+                    </Card>
+                </div>
+            </div>
 
             {/* CSV Export */}
             <Card title="📊 CSV-Export">

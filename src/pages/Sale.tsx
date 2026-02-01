@@ -4,7 +4,10 @@ import { useAuth } from '../contexts/AuthContext';
 import Button from '../components/ui/Button';
 import ProductSelectionCard from '../components/pos/ProductSelectionCard';
 import CartItem from '../components/pos/CartItem';
-import { ArchiveBoxXMarkIcon } from '@heroicons/react/24/outline';
+import { ArchiveBoxXMarkIcon, SparklesIcon } from '@heroicons/react/24/outline';
+import QuickBouquetModal from '../components/pos/QuickBouquetModal';
+
+// ... (remaining imports for interface etc)
 
 interface InventoryProduct {
     id: string;
@@ -20,12 +23,21 @@ interface InventoryProduct {
 }
 
 interface CartEntry {
-    inventoryId: string;
-    productId: string;
+    inventoryId?: string;
+    productId?: string;
     name: string;
     quantity: number;
     price: number;
     isBouquet: boolean;
+    isQuickBouquet?: boolean;
+    ingredients?: Array<{
+        inventoryId?: string;
+        productId?: string;
+        materialId?: string;
+        name: string;
+        type: 'product' | 'material';
+        quantity: number;
+    }>;
 }
 
 const Sale = () => {
@@ -36,6 +48,7 @@ const Sale = () => {
     const [cart, setCart] = useState<CartEntry[]>([]);
     const [loading, setLoading] = useState(true);
     const [processing, setProcessing] = useState(false);
+    const [isQuickBouquetModalOpen, setIsQuickBouquetModalOpen] = useState(false);
 
     // Fetch Inventory
     const fetchInventory = async () => {
@@ -105,14 +118,25 @@ const Sale = () => {
         });
     };
 
-    const updateCartItem = (inventoryId: string, updates: Partial<CartEntry>) => {
-        setCart(prev => prev.map(item =>
-            item.inventoryId === inventoryId ? { ...item, ...updates } : item
+    const addQuickBouquetToCart = (bouquet: { name: string, price: number, ingredients: any[] }) => {
+        setCart(prev => [...prev, {
+            name: bouquet.name,
+            quantity: 1,
+            price: bouquet.price,
+            isBouquet: true,
+            isQuickBouquet: true,
+            ingredients: bouquet.ingredients
+        }]);
+    };
+
+    const updateCartItem = (id: string | undefined, index: number, updates: Partial<CartEntry>) => {
+        setCart(prev => prev.map((item, i) =>
+            (id && item.inventoryId === id) || (!id && i === index) ? { ...item, ...updates } : item
         ));
     };
 
-    const removeFromCart = (inventoryId: string) => {
-        setCart(prev => prev.filter(item => item.inventoryId !== inventoryId));
+    const removeFromCart = (id: string | undefined, index: number) => {
+        setCart(prev => prev.filter((item, i) => id ? item.inventoryId !== id : i !== index));
     };
 
     const cartTotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
@@ -123,34 +147,78 @@ const Sale = () => {
         setProcessing(true);
 
         try {
-            const transactions = cart.map(item => ({
-                user_id: user?.id,
-                product_id: item.productId,
-                transaction_type: 'sale',
-                quantity: item.quantity,
-                unit_price: item.price,
-                total_price: item.price * item.quantity,
-                payment_method: 'cash'
-            }));
-
-            const { error: transError } = await supabase
-                .from('transactions')
-                .insert(transactions);
-
-            if (transError) throw transError;
-
+            // Flatten quick bouquets to ingredients + handles bundles
             for (const item of cart) {
-                const { data: currentInv } = await supabase
-                    .from('inventory')
-                    .select('quantity')
-                    .eq('id', item.inventoryId)
-                    .single();
+                if (item.isQuickBouquet && item.ingredients) {
+                    // 1. Transaction log for the whole bouquet (Sale)
+                    const { data: bouquetTrans, error: btError } = await supabase
+                        .from('transactions')
+                        .insert({
+                            user_id: user?.id,
+                            transaction_type: 'sale_bouquet', // As per PRD
+                            quantity: item.quantity,
+                            unit_price: item.price,
+                            total_price: item.price * item.quantity,
+                            payment_method: 'cash',
+                            notes: `Schnell-Strauß: ${item.name}`
+                        })
+                        .select()
+                        .single();
 
-                if (currentInv) {
-                    await supabase
+                    if (btError) throw btError;
+
+                    // 2. Deduct each product ingredient and log usage
+                    for (const ing of item.ingredients) {
+                        if (ing.type === 'product' && ing.inventoryId) {
+                            const { data: currentInv } = await supabase
+                                .from('inventory')
+                                .select('quantity')
+                                .eq('id', ing.inventoryId)
+                                .single();
+
+                            if (currentInv) {
+                                await supabase
+                                    .from('inventory')
+                                    .update({ quantity: Math.max(0, currentInv.quantity - (ing.quantity * item.quantity)) })
+                                    .eq('id', ing.inventoryId);
+
+                                // Usage log linked to bouquet sale
+                                await supabase.from('transactions').insert({
+                                    user_id: user?.id,
+                                    product_id: ing.productId,
+                                    transaction_type: 'usage',
+                                    quantity: ing.quantity * item.quantity,
+                                    unit_price: 0,
+                                    total_price: 0,
+                                    notes: `Bestandteil von ${item.name}`
+                                });
+                            }
+                        }
+                    }
+                } else {
+                    // Regular item sale
+                    await supabase.from('transactions').insert({
+                        user_id: user?.id,
+                        product_id: item.productId,
+                        transaction_type: 'sale',
+                        quantity: item.quantity,
+                        unit_price: item.price,
+                        total_price: item.price * item.quantity,
+                        payment_method: 'cash'
+                    });
+
+                    const { data: currentInv } = await supabase
                         .from('inventory')
-                        .update({ quantity: Math.max(0, currentInv.quantity - item.quantity) })
-                        .eq('id', item.inventoryId);
+                        .select('quantity')
+                        .eq('id', item.inventoryId)
+                        .single();
+
+                    if (currentInv) {
+                        await supabase
+                            .from('inventory')
+                            .update({ quantity: Math.max(0, currentInv.quantity - item.quantity) })
+                            .eq('id', item.inventoryId);
+                    }
                 }
             }
 
@@ -177,8 +245,8 @@ const Sale = () => {
                 <button
                     onClick={() => setActiveTab('single')}
                     className={`px-4 py-2 rounded-lg font-medium transition-colors ${activeTab === 'single'
-                            ? 'bg-primary text-white'
-                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        ? 'bg-primary text-white'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                         }`}
                 >
                     Einzelverkauf
@@ -186,11 +254,19 @@ const Sale = () => {
                 <button
                     onClick={() => setActiveTab('bouquet')}
                     className={`px-4 py-2 rounded-lg font-medium transition-colors ${activeTab === 'bouquet'
-                            ? 'bg-primary text-white'
-                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        ? 'bg-primary text-white'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                         }`}
                 >
                     💐 Vorbereitete Sträuße
+                </button>
+                <div className="flex-1" />
+                <button
+                    onClick={() => setIsQuickBouquetModalOpen(true)}
+                    className="px-4 py-2 rounded-lg font-bold bg-pink-50 text-pink-600 hover:bg-pink-100 transition-colors flex items-center border border-pink-100"
+                >
+                    <SparklesIcon className="h-5 w-5 mr-2" />
+                    Schnell-Strauß
                 </button>
             </div>
 
@@ -234,15 +310,15 @@ const Sale = () => {
                         {cart.length === 0 ? (
                             <p className="text-gray-400 text-sm text-center italic mt-10">Warenkorb leer</p>
                         ) : (
-                            cart.map(item => (
+                            cart.map((item, idx) => (
                                 <CartItem
-                                    key={item.inventoryId}
+                                    key={item.inventoryId || `quick-${idx}`}
                                     name={item.name}
                                     quantity={item.quantity}
                                     price={item.price}
-                                    onUpdateQuantity={(q) => updateCartItem(item.inventoryId, { quantity: q })}
-                                    onUpdatePrice={(p) => updateCartItem(item.inventoryId, { price: p })}
-                                    onRemove={() => removeFromCart(item.inventoryId)}
+                                    onUpdateQuantity={(q) => updateCartItem(item.inventoryId, idx, { quantity: q })}
+                                    onUpdatePrice={(p) => updateCartItem(item.inventoryId, idx, { price: p })}
+                                    onRemove={() => removeFromCart(item.inventoryId, idx)}
                                 />
                             ))
                         )}
@@ -265,6 +341,12 @@ const Sale = () => {
                     </div>
                 </div>
             </div>
+
+            <QuickBouquetModal
+                isOpen={isQuickBouquetModalOpen}
+                onClose={() => setIsQuickBouquetModalOpen(false)}
+                onAdd={addQuickBouquetToCart}
+            />
         </div>
     );
 };

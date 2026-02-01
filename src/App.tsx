@@ -12,6 +12,7 @@ import Sale from './pages/Sale';
 import Bouquet from './pages/Bouquet';
 import Inventory from './pages/Inventory';
 import More from './pages/More';
+import Waste from './pages/Waste';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
     const { session, loading } = useAuth();
@@ -57,6 +58,7 @@ function App() {
                     <Route path="/bouquet" element={<ProtectedRoute><Bouquet /></ProtectedRoute>} />
                     <Route path="/inventory" element={<ProtectedRoute><Inventory /></ProtectedRoute>} />
                     <Route path="/more" element={<ProtectedRoute><More /></ProtectedRoute>} />
+                    <Route path="/waste" element={<ProtectedRoute><Waste /></ProtectedRoute>} />
 
                     {/* Root Redirect */}
                     <Route path="/" element={<Navigate to="/dashboard" replace />} />
