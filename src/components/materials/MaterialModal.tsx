@@ -19,15 +19,18 @@ interface MaterialModalProps {
 const MaterialModal: React.FC<MaterialModalProps> = ({ isOpen, onClose, onSave, editingMaterial }) => {
     const [name, setName] = useState('');
     const [price, setPrice] = useState<number>(0);
+    const [vatRate, setVatRate] = useState<number>(19); // Default for materials
     const [loading, setLoading] = useState(false);
 
     useEffect(() => {
         if (editingMaterial) {
             setName(editingMaterial.name);
             setPrice(editingMaterial.unit_price);
+            setVatRate((editingMaterial as any).vat_rate || 19);
         } else {
             setName('');
             setPrice(0);
+            setVatRate(19);
         }
     }, [editingMaterial, isOpen]);
 
@@ -35,7 +38,7 @@ const MaterialModal: React.FC<MaterialModalProps> = ({ isOpen, onClose, onSave, 
         e.preventDefault();
         setLoading(true);
         try {
-            await onSave({ name, unit_price: price });
+            await onSave({ name, unit_price: price, vat_rate: vatRate } as any);
             onClose();
         } catch (error) {
             console.error('Error saving material:', error);
@@ -76,6 +79,28 @@ const MaterialModal: React.FC<MaterialModalProps> = ({ isOpen, onClose, onSave, 
                         onChange={(e) => setPrice(parseFloat(e.target.value) || 0)}
                         required
                     />
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                            MwSt-Satz (%)
+                        </label>
+                        <div className="flex gap-4">
+                            {[7, 19].map(rate => (
+                                <button
+                                    key={rate}
+                                    type="button"
+                                    onClick={() => setVatRate(rate)}
+                                    className={`flex-1 py-2 px-3 rounded-lg border text-sm font-medium transition-all ${vatRate === rate
+                                            ? 'bg-primary/10 border-primary text-primary'
+                                            : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                                        }`}
+                                >
+                                    {rate}%
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
                     <div className="pt-4 flex space-x-3">
                         <Button type="button" variant="outline" fullWidth onClick={onClose} disabled={loading}>
                             Abbrechen

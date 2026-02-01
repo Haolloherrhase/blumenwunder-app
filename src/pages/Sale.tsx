@@ -25,6 +25,7 @@ interface InventoryProduct {
     products?: {
         name: string;
         is_bouquet: boolean;
+        vat_rate?: number;
         categories?: {
             name: string;
         }
@@ -41,7 +42,8 @@ interface CartEntry {
     price: number;
     isBouquet: boolean;
     isQuickBouquet?: boolean;
-    isTemplate?: boolean; // NEW
+    isTemplate?: boolean;
+    vatRate?: number;
     ingredients?: Array<{
         inventoryId?: string;
         productId?: string;
@@ -49,6 +51,7 @@ interface CartEntry {
         name: string;
         type: 'product' | 'material';
         quantity: number;
+        vat_rate?: number;
     }>;
 }
 
@@ -60,6 +63,7 @@ const Sale = () => {
     const [cart, setCart] = useState<CartEntry[]>([]);
     const [loading, setLoading] = useState(true);
     const [processing, setProcessing] = useState(false);
+    const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'invoice'>('cash');
     const [isQuickBouquetModalOpen, setIsQuickBouquetModalOpen] = useState(false);
 
     // Fetch Inventory & Templates
@@ -77,6 +81,7 @@ const Sale = () => {
                     products (
                         name,
                         is_bouquet,
+                        vat_rate,
                         categories (name)
                     )
                 `)
@@ -94,6 +99,7 @@ const Sale = () => {
                     products (
                         name,
                         is_bouquet,
+                        vat_rate,
                         categories (name)
                     )
                 `)
@@ -112,8 +118,8 @@ const Sale = () => {
                         product_id,
                         material_id,
                         quantity,
-                        products (name),
-                        materials (name)
+                        products (name, vat_rate),
+                        materials (name, vat_rate)
                     )
                 `);
 
@@ -147,9 +153,10 @@ const Sale = () => {
                         material_id: i.material_id,
                         quantity: i.quantity,
                         name: i.products?.name || i.materials?.name || 'Zutat',
-                        type: (i.product_id ? 'product' : 'material') as 'product' | 'material'
+                        type: (i.product_id ? 'product' : 'material') as 'product' | 'material',
+                        vat_rate: i.products?.vat_rate || i.materials?.vat_rate || 7
                     })),
-                    products: { name: t.name, is_bouquet: true }
+                    products: { name: t.name, is_bouquet: true, vat_rate: 7 } // Bouquets are usually 7%
                 })));
             }
 
@@ -188,6 +195,7 @@ const Sale = () => {
                 price: item.unit_price || 5.00,
                 isBouquet: true,
                 isTemplate: item.isTemplate,
+                vatRate: item.isTemplate ? 7 : (item.products?.vat_rate || 7), // Default 7% for bouquets
                 ingredients: item.isTemplate ? (item.ingredients as any) : undefined
             }];
         });
@@ -200,6 +208,7 @@ const Sale = () => {
             price: bouquet.price,
             isBouquet: true,
             isQuickBouquet: true,
+            vatRate: 7, // Usually 7% for bouquets
             ingredients: bouquet.ingredients
         }]);
     };
@@ -224,6 +233,10 @@ const Sale = () => {
         try {
             // Flatten quick bouquets to ingredients + handles bundles
             for (const item of cart) {
+                const totalGross = item.price * item.quantity;
+                const vatRate = item.vatRate || 7; // Default to 7% if not specified
+                const vatAmount = totalGross - (totalGross / (1 + vatRate / 100));
+
                 if ((item.isQuickBouquet || item.isTemplate) && item.ingredients) {
                     // 1. Transaction log for the whole bouquet (Sale)
                     const { error: btError } = await supabase
@@ -233,8 +246,10 @@ const Sale = () => {
                             transaction_type: 'sale_bouquet',
                             quantity: item.quantity,
                             unit_price: item.price,
-                            total_price: item.price * item.quantity,
-                            payment_method: 'cash',
+                            total_price: totalGross,
+                            payment_method: paymentMethod,
+                            vat_rate: vatRate,
+                            vat_amount: vatAmount,
                             notes: `${item.isTemplate ? 'Vorlage' : 'Schnell-Strauß'}: ${item.name}`
                         });
 
@@ -276,8 +291,10 @@ const Sale = () => {
                         transaction_type: 'sale',
                         quantity: item.quantity,
                         unit_price: item.price,
-                        total_price: item.price * item.quantity,
-                        payment_method: 'cash'
+                        total_price: totalGross,
+                        payment_method: paymentMethod,
+                        vat_rate: vatRate,
+                        vat_amount: vatAmount
                     });
 
                     const { data: currentInv } = await supabase
@@ -397,7 +414,32 @@ const Sale = () => {
                         )}
                     </div>
 
-                    <div className="p-4 border-t border-gray-100 bg-gray-50 shrink-0">
+                    {/* Payment Method Selector */}
+                    <div className="p-4 border-t border-gray-100 bg-gray-50 space-y-3 shrink-0">
+                        <div className="space-y-2">
+                            <p className="text-xs font-semibold text-gray-500 uppercase">Zahlungsmethode</p>
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={() => setPaymentMethod('cash')}
+                                    className={`flex-1 py-3 rounded-xl border font-bold text-sm transition-all ${paymentMethod === 'cash'
+                                        ? 'bg-primary/10 border-primary text-primary'
+                                        : 'bg-white border-gray-100 text-gray-500'
+                                        }`}
+                                >
+                                    💵 Bar
+                                </button>
+                                <button
+                                    onClick={() => setPaymentMethod('card')}
+                                    className={`flex-1 py-3 rounded-xl border font-bold text-sm transition-all ${paymentMethod === 'card'
+                                        ? 'bg-primary/10 border-primary text-primary'
+                                        : 'bg-white border-gray-100 text-gray-500'
+                                        }`}
+                                >
+                                    💳 Karte
+                                </button>
+                            </div>
+                        </div>
+
                         <div className="flex justify-between items-center mb-4">
                             <span className="text-gray-600">Gesamt</span>
                             <span className="text-2xl font-bold text-primary">
