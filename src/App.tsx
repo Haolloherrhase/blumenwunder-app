@@ -14,6 +14,7 @@ import Inventory from './pages/Inventory';
 import More from './pages/More';
 import Waste from './pages/Waste';
 import Materials from './pages/Materials';
+import Analytics from './pages/Analytics';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
     const { session, loading } = useAuth();
@@ -61,6 +62,7 @@ function App() {
                     <Route path="/more" element={<ProtectedRoute><More /></ProtectedRoute>} />
                     <Route path="/waste" element={<ProtectedRoute><Waste /></ProtectedRoute>} />
                     <Route path="/materials" element={<ProtectedRoute><Materials /></ProtectedRoute>} />
+                    <Route path="/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
 
                     {/* Root Redirect */}
                     <Route path="/" element={<Navigate to="/dashboard" replace />} />

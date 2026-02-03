@@ -131,19 +131,21 @@ const Dashboard = () => {
 
             {/* Main Stats Grid */}
             <div className="grid grid-cols-2 gap-4">
-                <StatCard
-                    title="Umsatz Heute"
-                    value={loading ? '...' : formatCurrency(stats.todayRevenue)}
-                    icon={<CurrencyEuroIcon className="h-5 w-5" />}
-                    color="primary"
-                />
+                <div onClick={() => navigate('/analytics')} className="cursor-pointer">
+                    <StatCard
+                        title="Umsatz Heute"
+                        value={loading ? '...' : formatCurrency(stats.todayRevenue)}
+                        icon={<CurrencyEuroIcon className="h-5 w-5" />}
+                        color="primary"
+                    />
+                </div>
                 <StatCard
                     title="Verkäufe Heute"
                     value={loading ? '...' : stats.todaySales.toString()}
                     icon={<ShoppingBagIcon className="h-5 w-5" />}
                 />
 
-                <div className="col-span-2 grid grid-cols-2 gap-4">
+                <div onClick={() => navigate('/analytics')} className="cursor-pointer col-span-2 grid grid-cols-2 gap-4">
                     <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
                         <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Diesen Monat</p>
                         <p className="text-lg font-bold text-gray-800">{loading ? '...' : formatCurrency(stats.monthRevenue)}</p>

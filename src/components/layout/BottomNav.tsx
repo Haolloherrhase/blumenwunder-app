@@ -6,6 +6,7 @@ import {
     CurrencyDollarIcon,
     SparklesIcon,
     ArchiveBoxIcon,
+    ChartBarIcon,
     EllipsisHorizontalCircleIcon
 } from '@heroicons/react/24/outline';
 
@@ -16,6 +17,7 @@ const BottomNav = () => {
         { name: 'Verkauf', path: '/sale', icon: CurrencyDollarIcon },
         { name: 'Strauß', path: '/bouquet', icon: SparklesIcon },
         { name: 'Bestand', path: '/inventory', icon: ArchiveBoxIcon },
+        { name: 'Analyse', path: '/analytics', icon: ChartBarIcon },
         { name: 'Mehr', path: '/more', icon: EllipsisHorizontalCircleIcon },
     ];
 
