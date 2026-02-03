@@ -2,22 +2,19 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import Card from '../components/ui/Card';
-import StatCard from '../components/dashboard/StatCard';
-import Button from '../components/ui/Button';
 import {
     CurrencyEuroIcon,
     ShoppingBagIcon,
-    ExclamationTriangleIcon
+    ExclamationTriangleIcon,
+    PlusIcon,
+    BanknotesIcon,
+    SparklesIcon
 } from '@heroicons/react/24/outline';
 
 interface DashboardStats {
     todayRevenue: number;
     todaySales: number;
-    monthRevenue: number;
-    yearRevenue: number;
     lowStockCount: number;
-    topProducts: Array<{ name: string; quantity: number; revenue: number }>;
 }
 
 const Dashboard = () => {
@@ -26,10 +23,7 @@ const Dashboard = () => {
     const [stats, setStats] = useState<DashboardStats>({
         todayRevenue: 0,
         todaySales: 0,
-        monthRevenue: 0,
-        yearRevenue: 0,
-        lowStockCount: 0,
-        topProducts: []
+        lowStockCount: 0
     });
     const [loading, setLoading] = useState(true);
 
@@ -37,59 +31,19 @@ const Dashboard = () => {
         const fetchDashboardData = async () => {
             try {
                 const now = new Date();
-
                 const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
-                const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-                const yearStart = new Date(now.getFullYear(), 0, 1).toISOString();
 
-                // 1. Fetch Sales Data for different periods
-                const { data: allSales, error: salesError } = await supabase
+                const { data: todaySales, error: salesError } = await supabase
                     .from('transactions')
-                    .select(`
-                        total_price, 
-                        created_at, 
-                        quantity,
-                        products (name)
-                    `)
+                    .select('total_price')
                     .in('transaction_type', ['sale', 'sale_bouquet'])
-                    .gte('created_at', yearStart);
+                    .gte('created_at', dayStart);
 
                 if (salesError) throw salesError;
 
-                let todayRev = 0;
-                let todayCount = 0;
-                let monthRev = 0;
-                let yearRev = 0;
+                const todayRev = todaySales?.reduce((sum, t) => sum + Number(t.total_price), 0) || 0;
+                const todayCount = todaySales?.length || 0;
 
-                const productMap: Record<string, { quantity: number; revenue: number }> = {};
-
-                allSales?.forEach(t => {
-                    const price = Number(t.total_price);
-                    const date = t.created_at;
-                    const name = (t as any).products?.name || 'Indiv. Strauß';
-
-                    if (date >= dayStart) {
-                        todayRev += price;
-                        todayCount++;
-                    }
-                    if (date >= monthStart) {
-                        monthRev += price;
-                    }
-                    yearRev += price;
-
-                    // Aggregate for Top Products
-                    if (!productMap[name]) productMap[name] = { quantity: 0, revenue: 0 };
-                    productMap[name].quantity += t.quantity;
-                    productMap[name].revenue += price;
-                });
-
-                // Sort and Slice Top Products
-                const topProducts = Object.entries(productMap)
-                    .map(([name, data]) => ({ name, ...data }))
-                    .sort((a, b) => b.quantity - a.quantity)
-                    .slice(0, 5);
-
-                // 2. Fetch Low Stock Items (< 10)
                 const { count: lowStockCount, error: inventoryError } = await supabase
                     .from('inventory')
                     .select('*', { count: 'exact', head: true })
@@ -100,10 +54,7 @@ const Dashboard = () => {
                 setStats({
                     todayRevenue: todayRev,
                     todaySales: todayCount,
-                    monthRevenue: monthRev,
-                    yearRevenue: yearRev,
-                    lowStockCount: lowStockCount || 0,
-                    topProducts
+                    lowStockCount: lowStockCount || 0
                 });
 
             } catch (error) {
@@ -121,101 +72,127 @@ const Dashboard = () => {
     };
 
     return (
-        <div className="space-y-6 pb-24">
-            <div className="flex justify-between items-center">
-                <div>
-                    <h1 className="text-2xl font-bold text-gray-800">Hallo, {user?.email?.split('@')[0]}! 👋</h1>
-                    <p className="text-sm text-secondary-dark">Hier ist dein Geschäftsüberblick.</p>
-                </div>
-            </div>
+        <div className="min-h-screen pb-24 relative">
+            {/* Gradient Background */}
+            <div className="fixed inset-0 -z-10 bg-gradient-to-br from-primary/5 via-secondary/5 to-neutral-bg" />
+            <div className="fixed inset-0 -z-10 bg-[radial-gradient(circle_at_30%_20%,rgba(76,175,80,0.1),transparent_50%)]" />
+            <div className="fixed inset-0 -z-10 bg-[radial-gradient(circle_at_70%_80%,rgba(248,187,208,0.1),transparent_50%)]" />
 
-            {/* Main Stats Grid */}
-            <div className="grid grid-cols-2 gap-4">
-                <div onClick={() => navigate('/analytics')} className="cursor-pointer">
-                    <StatCard
-                        title="Umsatz Heute"
-                        value={loading ? '...' : formatCurrency(stats.todayRevenue)}
-                        icon={<CurrencyEuroIcon className="h-5 w-5" />}
-                        color="primary"
-                    />
-                </div>
-                <StatCard
-                    title="Verkäufe Heute"
-                    value={loading ? '...' : stats.todaySales.toString()}
-                    icon={<ShoppingBagIcon className="h-5 w-5" />}
-                />
-
-                <div onClick={() => navigate('/analytics')} className="cursor-pointer col-span-2 grid grid-cols-2 gap-4">
-                    <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
-                        <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Diesen Monat</p>
-                        <p className="text-lg font-bold text-gray-800">{loading ? '...' : formatCurrency(stats.monthRevenue)}</p>
-                    </div>
-                    <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
-                        <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Dieses Jahr</p>
-                        <p className="text-lg font-bold text-gray-800">{loading ? '...' : formatCurrency(stats.yearRevenue)}</p>
+            <div className="space-y-6 px-4 py-6">
+                {/* Header */}
+                <div className="backdrop-blur-xl bg-white/60 rounded-3xl p-6 shadow-2xl border border-white/20">
+                    <div className="flex items-center space-x-3">
+                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center shadow-lg">
+                            <SparklesIcon className="h-6 w-6 text-white" />
+                        </div>
+                        <div>
+                            <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">
+                                Hallo, {user?.email?.split('@')[0]}! 👋
+                            </h1>
+                            <p className="text-sm text-gray-500">
+                                {new Date().toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' })}
+                            </p>
+                        </div>
                     </div>
                 </div>
 
-                <div onClick={() => navigate('/inventory')} className="cursor-pointer col-span-2">
-                    <Card className="bg-red-50 border-red-100 flex items-center justify-between">
-                        <div className="flex items-center space-x-3">
-                            <ExclamationTriangleIcon className="h-6 w-6 text-red-500" />
+                {/* Today's Stats - Glass Cards */}
+                <div className="grid grid-cols-2 gap-4">
+                    {/* Revenue Card */}
+                    <div className="backdrop-blur-xl bg-white/40 rounded-3xl p-6 shadow-xl border border-white/30 hover:shadow-2xl hover:bg-white/50 transition-all duration-300">
+                        <div className="flex flex-col items-center text-center space-y-3">
+                            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-lg">
+                                <CurrencyEuroIcon className="h-7 w-7 text-white" />
+                            </div>
                             <div>
-                                <p className="text-sm font-medium text-red-800">Lager-Warnung</p>
-                                <p className="text-xs text-red-600">
-                                    {loading ? '...' : `${stats.lowStockCount} Artikel unter Warnschwelle`}
+                                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                                    Umsatz Heute
+                                </p>
+                                <p className="text-3xl font-bold bg-gradient-to-br from-primary to-primary/70 bg-clip-text text-transparent">
+                                    {loading ? '...' : formatCurrency(stats.todayRevenue)}
                                 </p>
                             </div>
                         </div>
-                        <span className="text-red-500 text-sm font-medium">Lager &rarr;</span>
-                    </Card>
-                </div>
-            </div>
+                    </div>
 
-            {/* Top Products */}
-            <Card title="🏆 Top Bestseller">
-                {loading ? (
-                    <p className="text-sm text-gray-400 py-4">Lade Daten...</p>
-                ) : stats.topProducts.length === 0 ? (
-                    <p className="text-sm text-gray-400 py-4 italic">Noch keine Verkaufsdaten vorhanden.</p>
-                ) : (
-                    <div className="space-y-4 pt-2">
-                        {stats.topProducts.map((p, idx) => {
-                            const maxQty = stats.topProducts[0].quantity;
-                            const percentage = (p.quantity / maxQty) * 100;
-                            return (
-                                <div key={idx} className="space-y-1">
-                                    <div className="flex justify-between text-sm">
-                                        <span className="font-medium text-gray-700">{p.name}</span>
-                                        <span className="text-gray-500">{p.quantity} Stk. ({formatCurrency(p.revenue)})</span>
-                                    </div>
-                                    <div className="w-full bg-gray-100 rounded-full h-2">
-                                        <div
-                                            className="bg-primary h-2 rounded-full transition-all duration-1000"
-                                            style={{ width: `${percentage}%` }}
-                                        />
-                                    </div>
+                    {/* Sales Card */}
+                    <div className="backdrop-blur-xl bg-white/40 rounded-3xl p-6 shadow-xl border border-white/30 hover:shadow-2xl hover:bg-white/50 transition-all duration-300">
+                        <div className="flex flex-col items-center text-center space-y-3">
+                            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-secondary to-secondary-dark flex items-center justify-center shadow-lg">
+                                <ShoppingBagIcon className="h-7 w-7 text-white" />
+                            </div>
+                            <div>
+                                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                                    Verkäufe
+                                </p>
+                                <p className="text-3xl font-bold bg-gradient-to-br from-secondary to-secondary-dark bg-clip-text text-transparent">
+                                    {loading ? '...' : stats.todaySales}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Quick Actions - Glass Buttons */}
+                <div className="backdrop-blur-xl bg-white/40 rounded-3xl p-6 shadow-xl border border-white/30">
+                    <h2 className="text-lg font-bold text-gray-800 mb-4">Schnellzugriff</h2>
+                    <div className="space-y-3">
+                        <div className="grid grid-cols-2 gap-3">
+                            <button
+                                onClick={() => navigate('/purchase')}
+                                className="backdrop-blur-sm bg-white/60 hover:bg-white/80 border border-white/40 rounded-2xl p-4 shadow-lg hover:shadow-xl transition-all duration-300 flex flex-col items-center space-y-2 group"
+                            >
+                                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-green-400 to-primary flex items-center justify-center group-hover:scale-110 transition-transform">
+                                    <PlusIcon className="h-6 w-6 text-white" />
                                 </div>
-                            );
-                        })}
+                                <span className="text-sm font-semibold text-gray-700">Einkauf</span>
+                            </button>
+
+                            <button
+                                onClick={() => navigate('/sale')}
+                                className="backdrop-blur-sm bg-gradient-to-br from-primary to-primary/80 hover:from-primary/90 hover:to-primary rounded-2xl p-4 shadow-lg hover:shadow-xl transition-all duration-300 flex flex-col items-center space-y-2 group"
+                            >
+                                <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                    <BanknotesIcon className="h-6 w-6 text-white" />
+                                </div>
+                                <span className="text-sm font-semibold text-white">Verkauf</span>
+                            </button>
+                        </div>
+
+                        <button
+                            onClick={() => navigate('/bouquet')}
+                            className="w-full backdrop-blur-sm bg-gradient-to-r from-secondary/60 to-secondary/40 hover:from-secondary/70 hover:to-secondary/50 border border-white/40 rounded-2xl p-4 shadow-lg hover:shadow-xl transition-all duration-300 flex items-center justify-center space-x-3 group"
+                        >
+                            <span className="text-2xl group-hover:scale-110 transition-transform">🌸</span>
+                            <span className="text-sm font-bold text-secondary-dark">Strauß konfigurieren</span>
+                        </button>
+                    </div>
+                </div>
+
+                {/* Low Stock Warning - Glass Alert */}
+                {stats.lowStockCount > 0 && (
+                    <div
+                        onClick={() => navigate('/inventory')}
+                        className="backdrop-blur-xl bg-red-50/60 border border-red-100/50 rounded-3xl p-5 shadow-xl hover:shadow-2xl transition-all duration-300 cursor-pointer group"
+                    >
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-4">
+                                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-red-400 to-red-500 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                                    <ExclamationTriangleIcon className="h-6 w-6 text-white" />
+                                </div>
+                                <div>
+                                    <p className="text-sm font-bold text-red-800">Lager-Warnung</p>
+                                    <p className="text-xs text-red-600">
+                                        {loading ? '...' : `${stats.lowStockCount} Artikel unter Warnschwelle`}
+                                    </p>
+                                </div>
+                            </div>
+                            <span className="text-red-500 text-sm font-semibold group-hover:translate-x-1 transition-transform">
+                                →
+                            </span>
+                        </div>
                     </div>
                 )}
-            </Card>
-
-            {/* Quick Actions */}
-            <div className="space-y-3">
-                <h2 className="text-lg font-semibold text-gray-800 px-1">Schnellzugriff</h2>
-                <div className="grid grid-cols-2 gap-3">
-                    <Button onClick={() => navigate('/sale')} variant="primary" className="justify-center h-12 !rounded-2xl">
-                        Kasse öffnen
-                    </Button>
-                    <Button onClick={() => navigate('/purchase')} variant="outline" className="justify-center h-12 bg-white !rounded-2xl">
-                        Wareneingang
-                    </Button>
-                    <Button onClick={() => navigate('/bouquet')} variant="secondary" className="justify-center col-span-2 h-12 !rounded-2xl text-primary font-bold">
-                        🌸 Strauß konfigurieren
-                    </Button>
-                </div>
             </div>
         </div>
     );
