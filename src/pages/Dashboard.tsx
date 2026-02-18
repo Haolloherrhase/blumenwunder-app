@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import SaleEntryModal from '../components/dashboard/SaleEntryModal';
+import ReceiptModal from '../components/dashboard/ReceiptModal';
 
 // ── Categories ──────────────────────────────────────────────
 const CATEGORIES = [
@@ -22,6 +23,10 @@ interface DaySale {
     description: string | null;
     notes: string | null;
     created_at: string;
+    product_id: string | null;
+    quantity: number | null;
+    transaction_type: string;
+    payment_method?: string;
 }
 
 interface DayPurchase {
@@ -48,6 +53,10 @@ const Dashboard = () => {
     const [totalPurchases, setTotalPurchases] = useState(0);
     const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [selectedSale, setSelectedSale] = useState<DaySale | null>(null);
+    const [receiptSale, setReceiptSale] = useState<DaySale | null>(null);
+    const [isReceiptOpen, setIsReceiptOpen] = useState(false);
+    const [storeSettings, setStoreSettings] = useState({ store_name: 'Blumenwunder', store_address: '' });
 
     // Fetch today's data
     const fetchTodayData = useCallback(async () => {
@@ -57,8 +66,8 @@ const Dashboard = () => {
             // Today's sales (from dashboard quick-sales AND regular sales)
             const { data: salesData, error: salesError } = await supabase
                 .from('transactions')
-                .select('id, category, total_price, description, notes, created_at')
-                .in('transaction_type', ['sale', 'sale_bouquet'])
+                .select('id, category, total_price, description, notes, created_at, product_id, quantity, transaction_type')
+                .in('transaction_type', ['sale', 'sale_bouquet', 'storno'])
                 .gte('created_at', dayStart)
                 .order('created_at', { ascending: false });
 
@@ -90,22 +99,123 @@ const Dashboard = () => {
         fetchTodayData();
     }, [fetchTodayData]);
 
-    // Save quick-sale
-    const handleSaveSale = async (entry: { category: CategoryId; amount: number; description: string }) => {
+    // Load store settings
+    useEffect(() => {
+        const fetchStoreSettings = async () => {
+            const { data } = await supabase
+                .from('settings')
+                .select('store_name, store_address')
+                .eq('user_id', user?.id)
+                .maybeSingle();
+            if (data) setStoreSettings(data);
+        };
+        if (user?.id) fetchStoreSettings();
+    }, [user?.id]);
+
+    // Save sale (quick-sale or from inventory)
+    const handleSaveSale = async (entry: {
+        category: CategoryId;
+        amount: number;
+        description: string;
+        inventoryId?: string;
+        productId?: string;
+        quantity?: number;
+    }) => {
+        const qty = entry.quantity || 1;
+        const totalPrice = entry.amount * qty;
+
+        // 1. Save transaction
         const { error } = await supabase.from('transactions').insert({
             user_id: user?.id,
             transaction_type: 'sale',
+            product_id: entry.productId || null,
             category: entry.category,
-            quantity: 1,
+            quantity: qty,
             unit_price: entry.amount,
-            total_price: entry.amount,
+            total_price: totalPrice,
             payment_method: 'cash',
             description: entry.description || null,
             notes: entry.description || null,
         });
 
         if (error) throw error;
+
+        // 2. If from inventory: reduce stock
+        if (entry.inventoryId) {
+            const { data: currentInv } = await supabase
+                .from('inventory')
+                .select('quantity')
+                .eq('id', entry.inventoryId)
+                .single();
+
+            if (currentInv) {
+                await supabase
+                    .from('inventory')
+                    .update({ quantity: Math.max(0, currentInv.quantity - qty) })
+                    .eq('id', entry.inventoryId);
+            }
+        }
+
+        // 3. Refresh dashboard
         await fetchTodayData();
+
+        // 4. Prepare receipt data for the last sale
+        setReceiptSale({
+            id: '',
+            category: entry.category as CategoryId,
+            total_price: totalPrice,
+            description: entry.description || null,
+            notes: entry.description || null,
+            created_at: new Date().toISOString(),
+            product_id: entry.productId || null,
+            quantity: qty,
+            transaction_type: 'sale',
+            payment_method: 'cash',
+        });
+        setIsReceiptOpen(true);
+    };
+
+    // Storno (cancel a sale)
+    const handleStorno = async (sale: DaySale) => {
+        try {
+            // 1. Create storno transaction (negative amount)
+            const { error: stornoError } = await supabase.from('transactions').insert({
+                user_id: user?.id,
+                product_id: sale.product_id || null,
+                transaction_type: 'storno',
+                category: sale.category,
+                quantity: sale.quantity || 1,
+                unit_price: -Number(sale.total_price) / (sale.quantity || 1),
+                total_price: -Number(sale.total_price),
+                payment_method: 'cash',
+                description: `STORNO: ${sale.description || sale.notes || 'Verkauf'}`,
+                notes: `Storno von Transaktion ${sale.id}`,
+            });
+            if (stornoError) throw stornoError;
+
+            // 2. If from inventory: restore stock
+            if (sale.product_id) {
+                const { data: currentInv } = await supabase
+                    .from('inventory')
+                    .select('id, quantity')
+                    .eq('product_id', sale.product_id)
+                    .maybeSingle();
+
+                if (currentInv) {
+                    await supabase
+                        .from('inventory')
+                        .update({ quantity: currentInv.quantity + (sale.quantity || 1) })
+                        .eq('id', currentInv.id);
+                }
+            }
+
+            // 3. Refresh dashboard
+            setSelectedSale(null);
+            await fetchTodayData();
+        } catch (error) {
+            console.error('Storno failed:', error);
+            setSelectedSale(null);
+        }
     };
 
     // Derived state
@@ -214,19 +324,26 @@ const Dashboard = () => {
                                         </p>
                                     ) : (
                                         <ul className="divide-y divide-gray-100/70">
-                                            {group.items.map(sale => (
-                                                <li
-                                                    key={sale.id}
-                                                    className="flex items-center justify-between py-2.5"
-                                                >
-                                                    <span className="text-sm text-gray-700">
-                                                        {sale.description || sale.notes || getCategoryLabel(sale.category)}
-                                                    </span>
-                                                    <span className="text-sm font-semibold text-gray-800 tabular-nums">
-                                                        {formatCurrency(Number(sale.total_price))}
-                                                    </span>
-                                                </li>
-                                            ))}
+                                            {group.items.map(sale => {
+                                                const isStorno = sale.transaction_type === 'storno';
+                                                return (
+                                                    <li
+                                                        key={sale.id}
+                                                        onClick={() => !isStorno && setSelectedSale(sale)}
+                                                        className={`flex items-center justify-between py-2.5 ${isStorno
+                                                            ? 'opacity-50'
+                                                            : 'cursor-pointer active:bg-gray-50 rounded-lg -mx-2 px-2'
+                                                            }`}
+                                                    >
+                                                        <span className={`text-sm ${isStorno ? 'text-red-400 line-through' : 'text-gray-700'}`}>
+                                                            {sale.description || sale.notes || getCategoryLabel(sale.category)}
+                                                        </span>
+                                                        <span className={`text-sm font-semibold tabular-nums ${isStorno ? 'text-red-400' : 'text-gray-800'}`}>
+                                                            {formatCurrency(Number(sale.total_price))}
+                                                        </span>
+                                                    </li>
+                                                );
+                                            })}
                                         </ul>
                                     )}
                                 </div>
@@ -250,16 +367,26 @@ const Dashboard = () => {
                             </div>
                             <div className="px-5 py-2">
                                 <ul className="divide-y divide-gray-100/70">
-                                    {sales.filter(s => !s.category).map(sale => (
-                                        <li key={sale.id} className="flex items-center justify-between py-2.5">
-                                            <span className="text-sm text-gray-700">
-                                                {sale.description || sale.notes || 'Verkauf'}
-                                            </span>
-                                            <span className="text-sm font-semibold text-gray-800 tabular-nums">
-                                                {formatCurrency(Number(sale.total_price))}
-                                            </span>
-                                        </li>
-                                    ))}
+                                    {sales.filter(s => !s.category).map(sale => {
+                                        const isStorno = sale.transaction_type === 'storno';
+                                        return (
+                                            <li
+                                                key={sale.id}
+                                                onClick={() => !isStorno && setSelectedSale(sale)}
+                                                className={`flex items-center justify-between py-2.5 ${isStorno
+                                                    ? 'opacity-50'
+                                                    : 'cursor-pointer active:bg-gray-50 rounded-lg -mx-2 px-2'
+                                                    }`}
+                                            >
+                                                <span className={`text-sm ${isStorno ? 'text-red-400 line-through' : 'text-gray-700'}`}>
+                                                    {sale.description || sale.notes || 'Verkauf'}
+                                                </span>
+                                                <span className={`text-sm font-semibold tabular-nums ${isStorno ? 'text-red-400' : 'text-gray-800'}`}>
+                                                    {formatCurrency(Number(sale.total_price))}
+                                                </span>
+                                            </li>
+                                        );
+                                    })}
                                 </ul>
                             </div>
                         </div>
@@ -285,6 +412,60 @@ const Dashboard = () => {
                 isOpen={isModalOpen}
                 onClose={() => setIsModalOpen(false)}
                 onSave={handleSaveSale}
+            />
+
+            {/* ──── Action Sheet (Quittung / Stornieren) ──── */}
+            {selectedSale && (
+                <div className="fixed inset-0 z-50 flex items-end justify-center">
+                    <div
+                        className="absolute inset-0 bg-black/30 backdrop-blur-sm"
+                        onClick={() => setSelectedSale(null)}
+                    />
+                    <div className="relative w-full max-w-md bg-white rounded-t-3xl shadow-2xl p-5 space-y-3 animate-slideUp">
+                        <p className="text-sm text-gray-500 text-center mb-2">
+                            {selectedSale.description || selectedSale.notes || getCategoryLabel(selectedSale.category)}
+                            {' — '}
+                            {formatCurrency(Number(selectedSale.total_price))}
+                        </p>
+                        <button
+                            onClick={() => {
+                                setReceiptSale(selectedSale);
+                                setIsReceiptOpen(true);
+                                setSelectedSale(null);
+                            }}
+                            className="w-full py-3.5 rounded-2xl bg-gray-100 font-semibold text-gray-800 hover:bg-gray-200 transition-colors flex items-center justify-center gap-2"
+                        >
+                            <span>🧾</span> Quittung anzeigen
+                        </button>
+                        <button
+                            onClick={() => handleStorno(selectedSale)}
+                            className="w-full py-3.5 rounded-2xl bg-red-50 font-semibold text-red-600 hover:bg-red-100 transition-colors flex items-center justify-center gap-2"
+                        >
+                            <span>↩️</span> Stornieren
+                        </button>
+                        <button
+                            onClick={() => setSelectedSale(null)}
+                            className="w-full py-3 rounded-2xl font-medium text-gray-400 hover:text-gray-600 transition-colors"
+                        >
+                            Abbrechen
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* ──── Receipt Modal ──── */}
+            <ReceiptModal
+                isOpen={isReceiptOpen}
+                onClose={() => { setIsReceiptOpen(false); setReceiptSale(null); }}
+                sale={receiptSale ? {
+                    description: receiptSale.description || receiptSale.notes || getCategoryLabel(receiptSale.category),
+                    total_price: Number(receiptSale.total_price),
+                    quantity: receiptSale.quantity || 1,
+                    category: receiptSale.category,
+                    created_at: receiptSale.created_at,
+                    payment_method: (receiptSale as any).payment_method || 'cash',
+                } : null}
+                storeSettings={storeSettings}
             />
         </div>
     );

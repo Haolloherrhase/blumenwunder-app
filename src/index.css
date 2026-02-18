@@ -14,6 +14,7 @@
     transform: translateY(100%);
     opacity: 0;
   }
+
   to {
     transform: translateY(0);
     opacity: 1;
@@ -22,4 +23,29 @@
 
 .animate-slideUp {
   animation: slideUp 0.3s ease-out;
+}
+
+/* Receipt print styles */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  .receipt-content,
+  .receipt-content * {
+    visibility: visible;
+  }
+
+  .receipt-content {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 80mm;
+    font-size: 12px;
+    padding: 4mm;
+  }
+
+  .no-print {
+    display: none !important;
+  }
 }
