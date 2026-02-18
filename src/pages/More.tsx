@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import { supabase } from '../lib/supabase';
@@ -10,6 +10,68 @@ const More = () => {
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
     const [exporting, setExporting] = useState(false);
+
+    // Settings state
+    const [storeName, setStoreName] = useState('Blumenwunder');
+    const [storeAddress, setStoreAddress] = useState('');
+    const [startingBalance, setStartingBalance] = useState('200');
+    const [savingSettings, setSavingSettings] = useState(false);
+    const [loadingSettings, setLoadingSettings] = useState(true);
+
+    // Load current settings
+    useEffect(() => {
+        const fetchSettings = async () => {
+            try {
+                const { data: { user } } = await supabase.auth.getUser();
+                if (!user) return;
+
+                const { data, error } = await supabase
+                    .from('settings')
+                    .select('*')
+                    .eq('user_id', user.id)
+                    .maybeSingle();
+
+                if (error) throw error;
+                if (data) {
+                    setStoreName(data.store_name);
+                    setStoreAddress(data.store_address);
+                    setStartingBalance(String(data.starting_balance));
+                }
+            } catch (err) {
+                console.error('Error loading settings:', err);
+            } finally {
+                setLoadingSettings(false);
+            }
+        };
+
+        fetchSettings();
+    }, []);
+
+    const handleSaveSettings = async () => {
+        setSavingSettings(true);
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) throw new Error('Not authenticated');
+
+            const { error } = await supabase
+                .from('settings')
+                .upsert({
+                    user_id: user.id,
+                    store_name: storeName,
+                    store_address: storeAddress,
+                    starting_balance: Number(startingBalance),
+                    updated_at: new Date().toISOString()
+                }, { onConflict: 'user_id' });
+
+            if (error) throw error;
+            alert('Einstellungen gespeichert! 🎉');
+        } catch (err) {
+            console.error('Error saving settings:', err);
+            alert('Fehler beim Speichern.');
+        } finally {
+            setSavingSettings(false);
+        }
+    };
 
     const handleExportCSV = async () => {
         if (!startDate || !endDate) {
@@ -162,9 +224,63 @@ const More = () => {
                 </div>
             </Card>
 
-            {/* Account */}
-            <Card title="👤 Account">
-                <p className="text-gray-500 py-2">Accountverwaltung (Coming Soon)</p>
+            {/* Account / Laden-Einstellungen */}
+            <Card title="👤 Laden-Einstellungen">
+                {loadingSettings ? (
+                    <div className="space-y-4 animate-pulse">
+                        <div className="h-10 bg-gray-100 rounded-lg w-full" />
+                        <div className="h-24 bg-gray-100 rounded-lg w-full" />
+                        <div className="h-10 bg-gray-100 rounded-lg w-full" />
+                    </div>
+                ) : (
+                    <div className="space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Ladenname
+                            </label>
+                            <input
+                                type="text"
+                                value={storeName}
+                                onChange={(e) => setStoreName(e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                                placeholder="z.B. Blumenwunder"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Adresse (für Quittung)
+                            </label>
+                            <textarea
+                                value={storeAddress}
+                                onChange={(e) => setStoreAddress(e.target.value)}
+                                rows={3}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                                placeholder="Musterstraße 1&#10;12345 Berlin"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Startguthaben Kasse (€)
+                            </label>
+                            <input
+                                type="number"
+                                value={startingBalance}
+                                onChange={(e) => setStartingBalance(e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                            />
+                        </div>
+
+                        <Button
+                            onClick={handleSaveSettings}
+                            disabled={savingSettings}
+                            fullWidth
+                        >
+                            {savingSettings ? 'Speichere...' : 'Einstellungen speichern'}
+                        </Button>
+                    </div>
+                )}
             </Card>
 
             {/* Material-Bibliothek */}
