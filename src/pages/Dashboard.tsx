@@ -1,199 +1,291 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import {
-    CurrencyEuroIcon,
-    ShoppingBagIcon,
-    ExclamationTriangleIcon,
-    PlusIcon,
-    BanknotesIcon,
-    SparklesIcon
-} from '@heroicons/react/24/outline';
+import SaleEntryModal from '../components/dashboard/SaleEntryModal';
 
-interface DashboardStats {
-    todayRevenue: number;
-    todaySales: number;
-    lowStockCount: number;
+// ── Categories ──────────────────────────────────────────────
+const CATEGORIES = [
+    { id: 'schnittblumen', label: 'Schnittblumen', icon: '✂️' },
+    { id: 'topfpflanzen', label: 'Topfpflanzen', icon: '🪴' },
+    { id: 'deko', label: 'Deko', icon: '🎀' },
+] as const;
+
+type CategoryId = typeof CATEGORIES[number]['id'];
+
+const STARTING_BALANCE = 200;
+
+// ── Types ───────────────────────────────────────────────────
+interface DaySale {
+    id: string;
+    category: CategoryId;
+    total_price: number;
+    description: string | null;
+    notes: string | null;
+    created_at: string;
 }
 
+interface DayPurchase {
+    total_price: number;
+}
+
+// ── Helpers ─────────────────────────────────────────────────
+const formatCurrency = (amount: number) =>
+    new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(amount);
+
+const getTodayStart = () => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+};
+
+const getCategoryLabel = (id: string) =>
+    CATEGORIES.find(c => c.id === id)?.label ?? id;
+
+// ── Dashboard Component ─────────────────────────────────────
 const Dashboard = () => {
     const { user } = useAuth();
-    const navigate = useNavigate();
-    const [stats, setStats] = useState<DashboardStats>({
-        todayRevenue: 0,
-        todaySales: 0,
-        lowStockCount: 0
-    });
+    const [sales, setSales] = useState<DaySale[]>([]);
+    const [totalSales, setTotalSales] = useState(0);
+    const [totalPurchases, setTotalPurchases] = useState(0);
     const [loading, setLoading] = useState(true);
+    const [isModalOpen, setIsModalOpen] = useState(false);
 
-    useEffect(() => {
-        const fetchDashboardData = async () => {
-            try {
-                const now = new Date();
-                const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+    // Fetch today's data
+    const fetchTodayData = useCallback(async () => {
+        try {
+            const dayStart = getTodayStart();
 
-                const { data: todaySales, error: salesError } = await supabase
-                    .from('transactions')
-                    .select('total_price')
-                    .in('transaction_type', ['sale', 'sale_bouquet'])
-                    .gte('created_at', dayStart);
+            // Today's sales (from dashboard quick-sales AND regular sales)
+            const { data: salesData, error: salesError } = await supabase
+                .from('transactions')
+                .select('id, category, total_price, description, notes, created_at')
+                .in('transaction_type', ['sale', 'sale_bouquet'])
+                .gte('created_at', dayStart)
+                .order('created_at', { ascending: false });
 
-                if (salesError) throw salesError;
+            if (salesError) throw salesError;
 
-                const todayRev = todaySales?.reduce((sum, t) => sum + Number(t.total_price), 0) || 0;
-                const todayCount = todaySales?.length || 0;
+            // Today's purchases
+            const { data: purchaseData, error: purchaseError } = await supabase
+                .from('transactions')
+                .select('total_price')
+                .eq('transaction_type', 'purchase')
+                .gte('created_at', dayStart);
 
-                const { count: lowStockCount, error: inventoryError } = await supabase
-                    .from('inventory')
-                    .select('*', { count: 'exact', head: true })
-                    .lt('quantity', 10);
+            if (purchaseError) throw purchaseError;
 
-                if (inventoryError) throw inventoryError;
+            const salesRows = (salesData || []) as DaySale[];
+            const purchaseRows = (purchaseData || []) as DayPurchase[];
 
-                setStats({
-                    todayRevenue: todayRev,
-                    todaySales: todayCount,
-                    lowStockCount: lowStockCount || 0
-                });
-
-            } catch (error) {
-                console.error('Error fetching dashboard data:', error);
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchDashboardData();
+            setSales(salesRows);
+            setTotalSales(salesRows.reduce((s, t) => s + Number(t.total_price), 0));
+            setTotalPurchases(purchaseRows.reduce((s, t) => s + Number(t.total_price), 0));
+        } catch (err) {
+            console.error('Error fetching dashboard data:', err);
+        } finally {
+            setLoading(false);
+        }
     }, []);
 
-    const formatCurrency = (amount: number) => {
-        return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(amount);
+    useEffect(() => {
+        fetchTodayData();
+    }, [fetchTodayData]);
+
+    // Save quick-sale
+    const handleSaveSale = async (entry: { category: CategoryId; amount: number; description: string }) => {
+        const { error } = await supabase.from('transactions').insert({
+            user_id: user?.id,
+            transaction_type: 'sale',
+            category: entry.category,
+            quantity: 1,
+            unit_price: entry.amount,
+            total_price: entry.amount,
+            payment_method: 'cash',
+            description: entry.description || null,
+            notes: entry.description || null,
+        });
+
+        if (error) throw error;
+        await fetchTodayData();
     };
 
+    // Derived state
+    const kassenstand = STARTING_BALANCE + totalSales - totalPurchases;
+
+    // Group sales by category
+    const groupedSales = CATEGORIES.map(cat => {
+        const items = sales.filter(s => s.category === cat.id);
+        const subtotal = items.reduce((s, t) => s + Number(t.total_price), 0);
+        return { ...cat, items, subtotal };
+    });
+
+    // Today's date formatted
+    const todayFormatted = new Date().toLocaleDateString('de-DE', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+    });
+
+    // ── Render ───────────────────────────────────────────────
     return (
-        <div className="min-h-screen pb-24 relative">
+        <div className="min-h-screen pb-28 relative">
             {/* Gradient Background */}
             <div className="fixed inset-0 -z-10 bg-gradient-to-br from-primary/5 via-secondary/5 to-neutral-bg" />
             <div className="fixed inset-0 -z-10 bg-[radial-gradient(circle_at_30%_20%,rgba(76,175,80,0.1),transparent_50%)]" />
             <div className="fixed inset-0 -z-10 bg-[radial-gradient(circle_at_70%_80%,rgba(248,187,208,0.1),transparent_50%)]" />
 
-            <div className="space-y-6 px-4 py-6">
-                {/* Header */}
-                <div className="backdrop-blur-xl bg-white/60 rounded-3xl p-6 shadow-2xl border border-white/20">
-                    <div className="flex items-center space-x-3">
-                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center shadow-lg">
-                            <SparklesIcon className="h-6 w-6 text-white" />
-                        </div>
-                        <div>
-                            <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">
-                                Hallo, {user?.email?.split('@')[0]}! 👋
-                            </h1>
-                            <p className="text-sm text-gray-500">
-                                {new Date().toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' })}
-                            </p>
-                        </div>
-                    </div>
-                </div>
+            <div className="space-y-5 px-4 py-6">
+                {/* ──── Kassenstand Card ──── */}
+                <div className="backdrop-blur-xl bg-white/70 rounded-3xl p-6 shadow-2xl border border-white/30">
+                    {/* Date */}
+                    <p className="text-sm text-gray-500 mb-1 flex items-center gap-2">
+                        <span>📅</span>
+                        <span>{todayFormatted}</span>
+                    </p>
 
-                {/* Today's Stats - Glass Cards */}
-                <div className="grid grid-cols-2 gap-4">
-                    {/* Revenue Card */}
-                    <div className="backdrop-blur-xl bg-white/40 rounded-3xl p-6 shadow-xl border border-white/30 hover:shadow-2xl hover:bg-white/50 transition-all duration-300">
-                        <div className="flex flex-col items-center text-center space-y-3">
-                            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-lg">
-                                <CurrencyEuroIcon className="h-7 w-7 text-white" />
-                            </div>
-                            <div>
-                                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
-                                    Umsatz Heute
-                                </p>
-                                <p className="text-3xl font-bold bg-gradient-to-br from-primary to-primary/70 bg-clip-text text-transparent">
-                                    {loading ? '...' : formatCurrency(stats.todayRevenue)}
-                                </p>
-                            </div>
-                        </div>
-                    </div>
+                    {/* Balance */}
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mt-3 mb-1">
+                        Kassenstand
+                    </p>
+                    {loading ? (
+                        <div className="h-12 w-40 bg-gray-200 rounded-xl animate-pulse" />
+                    ) : (
+                        <p className={`text-4xl font-extrabold tracking-tight ${kassenstand >= STARTING_BALANCE
+                            ? 'bg-gradient-to-r from-primary to-primary-dark bg-clip-text text-transparent'
+                            : 'text-red-600'
+                            }`}>
+                            {formatCurrency(kassenstand)}
+                        </p>
+                    )}
 
-                    {/* Sales Card */}
-                    <div className="backdrop-blur-xl bg-white/40 rounded-3xl p-6 shadow-xl border border-white/30 hover:shadow-2xl hover:bg-white/50 transition-all duration-300">
-                        <div className="flex flex-col items-center text-center space-y-3">
-                            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-secondary to-secondary-dark flex items-center justify-center shadow-lg">
-                                <ShoppingBagIcon className="h-7 w-7 text-white" />
-                            </div>
-                            <div>
-                                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
-                                    Verkäufe
-                                </p>
-                                <p className="text-3xl font-bold bg-gradient-to-br from-secondary to-secondary-dark bg-clip-text text-transparent">
-                                    {loading ? '...' : stats.todaySales}
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Quick Actions - Glass Buttons */}
-                <div className="backdrop-blur-xl bg-white/40 rounded-3xl p-6 shadow-xl border border-white/30">
-                    <h2 className="text-lg font-bold text-gray-800 mb-4">Schnellzugriff</h2>
-                    <div className="space-y-3">
-                        <div className="grid grid-cols-2 gap-3">
-                            <button
-                                onClick={() => navigate('/purchase')}
-                                className="backdrop-blur-sm bg-white/60 hover:bg-white/80 border border-white/40 rounded-2xl p-4 shadow-lg hover:shadow-xl transition-all duration-300 flex flex-col items-center space-y-2 group"
-                            >
-                                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-green-400 to-primary flex items-center justify-center group-hover:scale-110 transition-transform">
-                                    <PlusIcon className="h-6 w-6 text-white" />
-                                </div>
-                                <span className="text-sm font-semibold text-gray-700">Einkauf</span>
-                            </button>
-
-                            <button
-                                onClick={() => navigate('/sale')}
-                                className="backdrop-blur-sm bg-gradient-to-br from-primary to-primary/80 hover:from-primary/90 hover:to-primary rounded-2xl p-4 shadow-lg hover:shadow-xl transition-all duration-300 flex flex-col items-center space-y-2 group"
-                            >
-                                <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center group-hover:scale-110 transition-transform">
-                                    <BanknotesIcon className="h-6 w-6 text-white" />
-                                </div>
-                                <span className="text-sm font-semibold text-white">Verkauf</span>
-                            </button>
-                        </div>
-
-                        <button
-                            onClick={() => navigate('/bouquet')}
-                            className="w-full backdrop-blur-sm bg-gradient-to-r from-secondary/60 to-secondary/40 hover:from-secondary/70 hover:to-secondary/50 border border-white/40 rounded-2xl p-4 shadow-lg hover:shadow-xl transition-all duration-300 flex items-center justify-center space-x-3 group"
-                        >
-                            <span className="text-2xl group-hover:scale-110 transition-transform">🌸</span>
-                            <span className="text-sm font-bold text-secondary-dark">Strauß konfigurieren</span>
-                        </button>
-                    </div>
-                </div>
-
-                {/* Low Stock Warning - Glass Alert */}
-                {stats.lowStockCount > 0 && (
-                    <div
-                        onClick={() => navigate('/inventory')}
-                        className="backdrop-blur-xl bg-red-50/60 border border-red-100/50 rounded-3xl p-5 shadow-xl hover:shadow-2xl transition-all duration-300 cursor-pointer group"
-                    >
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center space-x-4">
-                                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-red-400 to-red-500 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
-                                    <ExclamationTriangleIcon className="h-6 w-6 text-white" />
-                                </div>
-                                <div>
-                                    <p className="text-sm font-bold text-red-800">Lager-Warnung</p>
-                                    <p className="text-xs text-red-600">
-                                        {loading ? '...' : `${stats.lowStockCount} Artikel unter Warnschwelle`}
-                                    </p>
-                                </div>
-                            </div>
-                            <span className="text-red-500 text-sm font-semibold group-hover:translate-x-1 transition-transform">
-                                →
+                    {/* Breakdown */}
+                    {!loading && (
+                        <div className="flex items-center gap-3 mt-3 text-sm text-gray-500 flex-wrap">
+                            <span className="bg-gray-100 px-3 py-1 rounded-full">
+                                Start: {formatCurrency(STARTING_BALANCE)}
                             </span>
+                            <span className="bg-green-50 text-green-700 px-3 py-1 rounded-full font-medium">
+                                + {formatCurrency(totalSales)}
+                            </span>
+                            {totalPurchases > 0 && (
+                                <span className="bg-red-50 text-red-600 px-3 py-1 rounded-full font-medium">
+                                    − {formatCurrency(totalPurchases)}
+                                </span>
+                            )}
                         </div>
-                    </div>
-                )}
+                    )}
+                </div>
+
+                {/* ──── Tagesliste ──── */}
+                <div className="space-y-4">
+                    {loading ? (
+                        // Skeleton
+                        Array.from({ length: 3 }).map((_, i) => (
+                            <div key={i} className="backdrop-blur-xl bg-white/50 rounded-2xl p-5 shadow-lg border border-white/30">
+                                <div className="h-5 w-32 bg-gray-200 rounded animate-pulse mb-3" />
+                                <div className="h-4 w-full bg-gray-100 rounded animate-pulse mb-2" />
+                                <div className="h-4 w-2/3 bg-gray-100 rounded animate-pulse" />
+                            </div>
+                        ))
+                    ) : (
+                        groupedSales.map(group => (
+                            <div
+                                key={group.id}
+                                className="backdrop-blur-xl bg-white/50 rounded-2xl shadow-lg border border-white/30 overflow-hidden"
+                            >
+                                {/* Category Header */}
+                                <div className="flex items-center justify-between px-5 py-3 bg-white/60 border-b border-gray-100/50">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-lg">{group.icon}</span>
+                                        <h3 className="font-bold text-gray-800">{group.label}</h3>
+                                    </div>
+                                    {group.items.length > 0 && (
+                                        <span className="text-sm font-bold text-primary">
+                                            {formatCurrency(group.subtotal)}
+                                        </span>
+                                    )}
+                                </div>
+
+                                {/* Sales Items */}
+                                <div className="px-5 py-2">
+                                    {group.items.length === 0 ? (
+                                        <p className="text-sm text-gray-400 italic py-2">
+                                            Keine Verkäufe
+                                        </p>
+                                    ) : (
+                                        <ul className="divide-y divide-gray-100/70">
+                                            {group.items.map(sale => (
+                                                <li
+                                                    key={sale.id}
+                                                    className="flex items-center justify-between py-2.5"
+                                                >
+                                                    <span className="text-sm text-gray-700">
+                                                        {sale.description || sale.notes || getCategoryLabel(sale.category)}
+                                                    </span>
+                                                    <span className="text-sm font-semibold text-gray-800 tabular-nums">
+                                                        {formatCurrency(Number(sale.total_price))}
+                                                    </span>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    )}
+                                </div>
+                            </div>
+                        ))
+                    )}
+
+                    {/* Uncategorized sales (from regular /sale page, without category) */}
+                    {!loading && sales.filter(s => !s.category).length > 0 && (
+                        <div className="backdrop-blur-xl bg-white/50 rounded-2xl shadow-lg border border-white/30 overflow-hidden">
+                            <div className="flex items-center justify-between px-5 py-3 bg-white/60 border-b border-gray-100/50">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-lg">📦</span>
+                                    <h3 className="font-bold text-gray-800">Sonstige Verkäufe</h3>
+                                </div>
+                                <span className="text-sm font-bold text-primary">
+                                    {formatCurrency(
+                                        sales.filter(s => !s.category).reduce((sum, s) => sum + Number(s.total_price), 0)
+                                    )}
+                                </span>
+                            </div>
+                            <div className="px-5 py-2">
+                                <ul className="divide-y divide-gray-100/70">
+                                    {sales.filter(s => !s.category).map(sale => (
+                                        <li key={sale.id} className="flex items-center justify-between py-2.5">
+                                            <span className="text-sm text-gray-700">
+                                                {sale.description || sale.notes || 'Verkauf'}
+                                            </span>
+                                            <span className="text-sm font-semibold text-gray-800 tabular-nums">
+                                                {formatCurrency(Number(sale.total_price))}
+                                            </span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        </div>
+                    )}
+                </div>
             </div>
+
+            {/* ──── Sticky Verkauf Button ──── */}
+            <div className="fixed bottom-20 left-0 right-0 z-30 px-4 pb-2">
+                <div className="max-w-md md:max-w-7xl mx-auto">
+                    <button
+                        onClick={() => setIsModalOpen(true)}
+                        className="w-full py-4 rounded-2xl bg-gradient-to-r from-primary to-primary-dark text-white font-bold text-lg shadow-2xl hover:shadow-3xl active:scale-[0.98] transition-all duration-200 flex items-center justify-center gap-3"
+                    >
+                        <span className="text-xl">🛒</span>
+                        Verkauf erfassen
+                    </button>
+                </div>
+            </div>
+
+            {/* ──── Sale Entry Modal ──── */}
+            <SaleEntryModal
+                isOpen={isModalOpen}
+                onClose={() => setIsModalOpen(false)}
+                onSave={handleSaveSale}
+            />
         </div>
     );
 };
