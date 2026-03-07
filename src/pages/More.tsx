@@ -2,11 +2,13 @@ import { useState, useEffect } from 'react';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import { supabase } from '../lib/supabase';
-import { ArrowDownTrayIcon } from '@heroicons/react/24/outline';
+import { useAuth } from '../contexts/AuthContext';
+import { ArrowDownTrayIcon, UserIcon } from '@heroicons/react/24/outline';
 import { useNavigate } from 'react-router-dom';
 
 const More = () => {
     const navigate = useNavigate();
+    const { user } = useAuth();
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
     const [exporting, setExporting] = useState(false);
@@ -234,6 +236,18 @@ const More = () => {
                     </div>
                 ) : (
                     <div className="space-y-4">
+                        <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl border border-gray-100 mb-2">
+                            <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-sm">
+                                <UserIcon className="h-6 w-6 text-primary" />
+                            </div>
+                            <div>
+                                <p className="text-xs text-gray-500 font-medium">Angemeldet als</p>
+                                <p className="text-sm font-semibold text-gray-800">{user?.email}</p>
+                            </div>
+                        </div>
+
+                        <hr className="border-gray-100" />
+
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
                                 Ladenname

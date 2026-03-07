@@ -13,7 +13,7 @@ const CATEGORIES = [
 
 type CategoryId = typeof CATEGORIES[number]['id'];
 
-const STARTING_BALANCE = 200;
+// const STARTING_BALANCE = 200; // Now handled via settings table
 
 // ── Types ───────────────────────────────────────────────────
 interface DaySale {
@@ -56,7 +56,11 @@ const Dashboard = () => {
     const [selectedSale, setSelectedSale] = useState<DaySale | null>(null);
     const [receiptSale, setReceiptSale] = useState<DaySale | null>(null);
     const [isReceiptOpen, setIsReceiptOpen] = useState(false);
-    const [storeSettings, setStoreSettings] = useState({ store_name: 'Blumenwunder', store_address: '' });
+    const [storeSettings, setStoreSettings] = useState({
+        store_name: 'Blumenwunder',
+        store_address: '',
+        starting_balance: 200
+    });
 
     // Fetch today's data
     const fetchTodayData = useCallback(async () => {
@@ -104,10 +108,14 @@ const Dashboard = () => {
         const fetchStoreSettings = async () => {
             const { data } = await supabase
                 .from('settings')
-                .select('store_name, store_address')
+                .select('store_name, store_address, starting_balance')
                 .eq('user_id', user?.id)
                 .maybeSingle();
-            if (data) setStoreSettings(data);
+            if (data) setStoreSettings({
+                store_name: data.store_name,
+                store_address: data.store_address,
+                starting_balance: data.starting_balance ?? 200
+            });
         };
         if (user?.id) fetchStoreSettings();
     }, [user?.id]);
@@ -219,7 +227,8 @@ const Dashboard = () => {
     };
 
     // Derived state
-    const kassenstand = STARTING_BALANCE + totalSales - totalPurchases;
+    const currentStartingBalance = Number(storeSettings.starting_balance);
+    const kassenstand = currentStartingBalance + totalSales - totalPurchases;
 
     // Group sales by category
     const groupedSales = CATEGORIES.map(cat => {
@@ -260,7 +269,7 @@ const Dashboard = () => {
                     {loading ? (
                         <div className="h-12 w-40 bg-gray-200 rounded-xl animate-pulse" />
                     ) : (
-                        <p className={`text-4xl font-extrabold tracking-tight ${kassenstand >= STARTING_BALANCE
+                        <p className={`text-4xl font-extrabold tracking-tight ${kassenstand >= currentStartingBalance
                             ? 'bg-gradient-to-r from-primary to-primary-dark bg-clip-text text-transparent'
                             : 'text-red-600'
                             }`}>
@@ -272,7 +281,7 @@ const Dashboard = () => {
                     {!loading && (
                         <div className="flex items-center gap-3 mt-3 text-sm text-gray-500 flex-wrap">
                             <span className="bg-gray-100 px-3 py-1 rounded-full">
-                                Start: {formatCurrency(STARTING_BALANCE)}
+                                Start: {formatCurrency(currentStartingBalance)}
                             </span>
                             <span className="bg-green-50 text-green-700 px-3 py-1 rounded-full font-medium">
                                 + {formatCurrency(totalSales)}
