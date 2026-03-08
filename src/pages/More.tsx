@@ -173,6 +173,18 @@ const More = () => {
                         </div>
                     </Card>
                 </div>
+
+                <div onClick={() => navigate('/quote')} className="cursor-pointer">
+                    <Card className="hover:bg-gray-50 transition-colors border-l-4 border-l-pink-400">
+                        <div className="flex justify-between items-center">
+                            <div>
+                                <h3 className="font-semibold text-gray-900">💒 Hochzeits-Kostenvoranschlag</h3>
+                                <p className="text-sm text-gray-500">Angebot für Hochzeitsfloristik erstellen & versenden</p>
+                            </div>
+                            <span className="text-gray-400">&rarr;</span>
+                        </div>
+                    </Card>
+                </div>
             </div>
 
             {/* CSV Export */}
