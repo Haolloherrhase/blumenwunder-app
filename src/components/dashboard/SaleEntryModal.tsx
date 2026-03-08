@@ -28,7 +28,6 @@ interface InventoryItem {
     product_id: string;
     products: {
         name: string;
-        vat_rate: number;
         categories: { name: string } | null;
     };
 }
@@ -98,7 +97,6 @@ const SaleEntryModal: React.FC<SaleEntryModalProps> = ({ isOpen, onClose, onSave
                         product_id,
                         products (
                             name,
-                            vat_rate,
                             categories (name)
                         )
                     `)
@@ -241,8 +239,8 @@ const SaleEntryModal: React.FC<SaleEntryModalProps> = ({ isOpen, onClose, onSave
                     <button
                         onClick={() => { setActiveTab('inventory'); setError(''); }}
                         className={`flex-1 py-2.5 text-sm font-semibold rounded-xl transition-all duration-200 ${activeTab === 'inventory'
-                                ? 'bg-white text-primary shadow-md'
-                                : 'text-gray-500 hover:text-gray-700'
+                            ? 'bg-white text-primary shadow-md'
+                            : 'text-gray-500 hover:text-gray-700'
                             }`}
                     >
                         📦 Aus Bestand
@@ -250,8 +248,8 @@ const SaleEntryModal: React.FC<SaleEntryModalProps> = ({ isOpen, onClose, onSave
                     <button
                         onClick={() => { setActiveTab('free'); setError(''); }}
                         className={`flex-1 py-2.5 text-sm font-semibold rounded-xl transition-all duration-200 ${activeTab === 'free'
-                                ? 'bg-white text-primary shadow-md'
-                                : 'text-gray-500 hover:text-gray-700'
+                            ? 'bg-white text-primary shadow-md'
+                            : 'text-gray-500 hover:text-gray-700'
                             }`}
                     >
                         ✏️ Freiverkauf
@@ -418,8 +416,8 @@ const SaleEntryModal: React.FC<SaleEntryModalProps> = ({ isOpen, onClose, onSave
                                             key={cat.id}
                                             onClick={() => setFreeCategory(cat.id)}
                                             className={`flex flex-col items-center p-3 rounded-2xl border-2 transition-all duration-200 ${freeCategory === cat.id
-                                                    ? 'border-primary bg-primary/10 shadow-md scale-[1.02]'
-                                                    : 'border-gray-100 bg-white hover:border-gray-200 hover:bg-gray-50'
+                                                ? 'border-primary bg-primary/10 shadow-md scale-[1.02]'
+                                                : 'border-gray-100 bg-white hover:border-gray-200 hover:bg-gray-50'
                                                 }`}
                                         >
                                             <span className="text-2xl mb-1">{cat.icon}</span>

@@ -51,12 +51,38 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ isOpen, onClose, sale, stor
     if (!isOpen || !sale) return null;
 
     const totalPrice = Number(sale.total_price);
-    const vatRate = 19;
-    const netPrice = totalPrice / (1 + vatRate / 100);
-    const vatAmount = totalPrice - netPrice;
 
-    const handlePrint = () => {
-        window.print();
+    const handleShare = async () => {
+        const date = formatDateTime(sale.created_at);
+        const receiptText = `
+${storeSettings.store_name || 'Blumenwunder'}
+${storeSettings.store_address || ''}
+
+Datum: ${date}
+
+${sale.description || getCategoryLabel(sale.category)}
+Gesamt: ${formatCurrency(totalPrice)}
+
+Gemäß §19 UStG wird keine Umsatzsteuer berechnet.
+
+Vielen Dank für Ihren Einkauf!
+        `.trim();
+
+        if (navigator.share) {
+            try {
+                await navigator.share({
+                    title: `Beleg — ${storeSettings.store_name || 'Blumenwunder'}`,
+                    text: receiptText,
+                });
+                return;
+            } catch (e) {
+                // User aborted or unable to share
+            }
+        }
+
+        const subject = encodeURIComponent(`Beleg — ${storeSettings.store_name || 'Blumenwunder'} — ${date}`);
+        const body = encodeURIComponent(receiptText);
+        window.location.href = `mailto:?subject=${subject}&body=${body}`;
     };
 
     return (
@@ -132,14 +158,12 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ isOpen, onClose, sale, stor
                             <span>Gesamt</span>
                             <span className="tabular-nums">{formatCurrency(totalPrice)}</span>
                         </div>
-                        <div className="flex justify-between text-xs text-gray-400">
-                            <span>inkl. {vatRate}% MwSt</span>
-                            <span className="tabular-nums">{formatCurrency(vatAmount)}</span>
-                        </div>
-                        <div className="flex justify-between text-xs text-gray-400">
-                            <span>Netto</span>
-                            <span className="tabular-nums">{formatCurrency(netPrice)}</span>
-                        </div>
+                    </div>
+
+                    <div className="mt-4 text-center">
+                        <p className="text-xs text-gray-500 italic">
+                            Gemäß §19 UStG wird keine Umsatzsteuer berechnet.
+                        </p>
                     </div>
 
                     {/* Divider */}
@@ -161,10 +185,10 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ isOpen, onClose, sale, stor
                 {/* Action Buttons — hidden in print */}
                 <div className="p-5 border-t border-gray-100 flex gap-3 no-print">
                     <button
-                        onClick={handlePrint}
+                        onClick={handleShare}
                         className="flex-1 py-3.5 rounded-2xl bg-gradient-to-r from-primary to-primary-dark text-white font-bold shadow-lg hover:shadow-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2"
                     >
-                        <span>🖨️</span> Drucken
+                        <span>📤</span> Beleg teilen
                     </button>
                     <button
                         onClick={onClose}

@@ -8,7 +8,6 @@ interface AddProductModalProps {
     isOpen: boolean;
     onClose: () => void;
     onSuccess: () => void;
-    type: 'product' | 'material';
 }
 
 interface Category {
@@ -16,11 +15,10 @@ interface Category {
     name: string;
 }
 
-const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClose, onSuccess, type }) => {
+const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClose, onSuccess }) => {
     const [name, setName] = useState('');
     const [categoryId, setCategoryId] = useState('');
     const [unitPrice, setUnitPrice] = useState('');
-    const [vatRate, setVatRate] = useState<number>(7); // State for VAT
     const [categories, setCategories] = useState<Category[]>([]);
     const [loading, setLoading] = useState(false);
 
@@ -30,54 +28,40 @@ const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClose, onSu
             if (data) setCategories(data);
         };
 
-        if (isOpen && type === 'product') {
+        if (isOpen) {
             fetchCategories();
         }
-    }, [isOpen, type]);
+    }, [isOpen]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
 
         try {
-            if (type === 'product') {
-                // 1. Create Product
-                const { data: productData, error: productError } = await supabase
-                    .from('products')
-                    .insert({
-                        name,
-                        category_id: categoryId,
-                        avg_shelf_life_days: 7,
-                        vat_rate: vatRate
-                    })
-                    .select()
-                    .single();
+            // 1. Create Product
+            const { data: productData, error: productError } = await supabase
+                .from('products')
+                .insert({
+                    name,
+                    category_id: categoryId,
+                    avg_shelf_life_days: 7,
+                    vat_rate: 0
+                })
+                .select()
+                .single();
 
-                if (productError) throw productError;
+            if (productError) throw productError;
 
-                // 2. Create Inventory Entry (initially 0)
-                const { error: inventoryError } = await supabase
-                    .from('inventory')
-                    .insert({
-                        product_id: productData.id,
-                        quantity: 0,
-                        unit_purchase_price: Number(unitPrice) || 0
-                    });
+            // 2. Create Inventory Entry (initially 0)
+            const { error: inventoryError } = await supabase
+                .from('inventory')
+                .insert({
+                    product_id: productData.id,
+                    quantity: 0,
+                    unit_purchase_price: Number(unitPrice) || 0
+                });
 
-                if (inventoryError) throw inventoryError;
-
-            } else {
-                // Create Material
-                const { error } = await supabase
-                    .from('materials')
-                    .insert({
-                        name,
-                        unit_price: Number(unitPrice) || 0,
-                        vat_rate: vatRate
-                    });
-
-                if (error) throw error;
-            }
+            if (inventoryError) throw inventoryError;
 
             onSuccess();
             onClose();
@@ -99,7 +83,7 @@ const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClose, onSu
             <div className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden">
                 <div className="flex justify-between items-center p-4 border-b border-gray-100">
                     <h3 className="font-semibold text-gray-800">
-                        {type === 'product' ? 'Neue Blume/Pflanze' : 'Neues Material'}
+                        Neues Produkt
                     </h3>
                     <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
                         <XMarkIcon className="h-5 w-5" />
@@ -111,28 +95,26 @@ const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClose, onSu
                         label="Name"
                         value={name}
                         onChange={(e) => setName(e.target.value)}
-                        placeholder={type === 'product' ? 'z.B. Rote Rose' : 'z.B. Seidenband Rot'}
+                        placeholder={'z.B. Rote Rose oder Seidenband Rot'}
                         required
                     />
 
-                    {type === 'product' && (
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Kategorie
-                            </label>
-                            <select
-                                value={categoryId}
-                                onChange={(e) => setCategoryId(e.target.value)}
-                                required
-                                className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-colors"
-                            >
-                                <option value="">Bitte wählen...</option>
-                                {categories.map(cat => (
-                                    <option key={cat.id} value={cat.id}>{cat.name}</option>
-                                ))}
-                            </select>
-                        </div>
-                    )}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Kategorie
+                        </label>
+                        <select
+                            value={categoryId}
+                            onChange={(e) => setCategoryId(e.target.value)}
+                            required
+                            className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-colors"
+                        >
+                            <option value="">Bitte wählen...</option>
+                            {categories.map(cat => (
+                                <option key={cat.id} value={cat.id}>{cat.name}</option>
+                            ))}
+                        </select>
+                    </div>
 
                     <Input
                         label="Einkaufspreis (pro Stück)"
@@ -143,27 +125,6 @@ const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClose, onSu
                         placeholder="0.00"
                         required
                     />
-
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                            MwSt-Satz (%)
-                        </label>
-                        <div className="flex gap-4">
-                            {[7, 19].map(rate => (
-                                <button
-                                    key={rate}
-                                    type="button"
-                                    onClick={() => setVatRate(rate)}
-                                    className={`flex-1 py-2 px-3 rounded-lg border text-sm font-medium transition-all ${vatRate === rate
-                                        ? 'bg-primary/10 border-primary text-primary'
-                                        : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
-                                        }`}
-                                >
-                                    {rate}%
-                                </button>
-                            ))}
-                        </div>
-                    </div>
 
                     <div className="pt-2">
                         <Button type="submit" fullWidth disabled={loading}>

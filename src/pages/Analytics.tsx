@@ -12,10 +12,6 @@ interface AnalyticsData {
     revenueByDay: any[];
     paymentMethods: any[];
     topCategories: any[];
-    vatSummary: {
-        vat7: { net: number; vat: number; gross: number };
-        vat19: { net: number; vat: number; gross: number };
-    };
 }
 
 const Analytics = () => {
@@ -38,8 +34,6 @@ const Analytics = () => {
                     total_price,
                     created_at,
                     payment_method,
-                    vat_rate,
-                    vat_amount,
                     transaction_type,
                     products (
                         categories (name)
@@ -54,16 +48,10 @@ const Analytics = () => {
             const dayMap: Record<string, number> = {};
             const payMap: Record<string, number> = { cash: 0, card: 0 };
             const catMap: Record<string, number> = {};
-            const vat = {
-                vat7: { net: 0, vat: 0, gross: 0 },
-                vat19: { net: 0, vat: 0, gross: 0 }
-            };
 
             txs?.forEach(t => {
                 const date = new Date(t.created_at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
                 const gross = Number(t.total_price);
-                const vatAmt = Number(t.vat_amount) || 0;
-                const net = gross - vatAmt;
                 const payMethod = t.payment_method || 'cash';
                 const catName = (t as any).products?.categories?.name || (t.transaction_type === 'sale_bouquet' ? 'Sträuße' : 'Sonstiges');
 
@@ -75,18 +63,6 @@ const Analytics = () => {
 
                 // Categories
                 catMap[catName] = (catMap[catName] || 0) + gross;
-
-                // VAT Summary
-                const rate = Number(t.vat_rate);
-                if (rate === 7) {
-                    vat.vat7.gross += gross;
-                    vat.vat7.vat += vatAmt;
-                    vat.vat7.net += net;
-                } else if (rate === 19) {
-                    vat.vat19.gross += gross;
-                    vat.vat19.vat += vatAmt;
-                    vat.vat19.net += net;
-                }
             });
 
             // Convert maps to arrays for Recharts
@@ -99,7 +75,7 @@ const Analytics = () => {
                 .map(([name, value]) => ({ name, value }))
                 .sort((a, b) => b.value - a.value);
 
-            setData({ revenueByDay, paymentMethods, topCategories, vatSummary: vat });
+            setData({ revenueByDay, paymentMethods, topCategories });
         } catch (err) {
             console.error('Analytics error:', err);
         } finally {
@@ -180,42 +156,6 @@ const Analytics = () => {
                     </div>
                 </Card>
             </div>
-
-            {/* VAT Summary Table */}
-            <Card title="Steuer-Zusammenfassung (Letzte 30 Tage)">
-                <div className="overflow-x-auto">
-                    <table className="w-full text-sm text-left">
-                        <thead className="bg-gray-50 text-gray-500 uppercase text-[10px] tracking-wider">
-                            <tr>
-                                <th className="px-4 py-3">Satz</th>
-                                <th className="px-4 py-3">Netto</th>
-                                <th className="px-4 py-3">MwSt</th>
-                                <th className="px-4 py-3 font-bold text-gray-800">Brutto</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100">
-                            <tr>
-                                <td className="px-4 py-4 font-medium">7% MwSt</td>
-                                <td className="px-4 py-4">{data.vatSummary.vat7.net.toFixed(2)}€</td>
-                                <td className="px-4 py-4">{data.vatSummary.vat7.vat.toFixed(2)}€</td>
-                                <td className="px-4 py-4 font-bold">{data.vatSummary.vat7.gross.toFixed(2)}€</td>
-                            </tr>
-                            <tr>
-                                <td className="px-4 py-4 font-medium">19% MwSt</td>
-                                <td className="px-4 py-4">{data.vatSummary.vat19.net.toFixed(2)}€</td>
-                                <td className="px-4 py-4">{data.vatSummary.vat19.vat.toFixed(2)}€</td>
-                                <td className="px-4 py-4 font-bold">{data.vatSummary.vat19.gross.toFixed(2)}€</td>
-                            </tr>
-                            <tr className="bg-primary/5">
-                                <td className="px-4 py-4 font-bold">Gesamt</td>
-                                <td className="px-4 py-4 font-bold">{(data.vatSummary.vat7.net + data.vatSummary.vat19.net).toFixed(2)}€</td>
-                                <td className="px-4 py-4 font-bold">{(data.vatSummary.vat7.vat + data.vatSummary.vat19.vat).toFixed(2)}€</td>
-                                <td className="px-4 py-4 font-bold text-primary">{(data.vatSummary.vat7.gross + data.vatSummary.vat19.gross).toFixed(2)}€</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </Card>
         </div>
     );
 };

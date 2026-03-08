@@ -3,8 +3,6 @@ import { NavLink } from 'react-router-dom';
 import {
     HomeIcon,
     PlusCircleIcon,
-    CurrencyDollarIcon,
-    SparklesIcon,
     ArchiveBoxIcon,
     ChartBarIcon,
     EllipsisHorizontalCircleIcon
@@ -14,8 +12,6 @@ const BottomNav = () => {
     const navItems = [
         { name: 'Dashboard', path: '/dashboard', icon: HomeIcon },
         { name: 'Einkauf', path: '/purchase', icon: PlusCircleIcon },
-        { name: 'Verkauf', path: '/sale', icon: CurrencyDollarIcon },
-        { name: 'Strauß', path: '/bouquet', icon: SparklesIcon },
         { name: 'Bestand', path: '/inventory', icon: ArchiveBoxIcon },
         { name: 'Analyse', path: '/analytics', icon: ChartBarIcon },
         { name: 'Mehr', path: '/more', icon: EllipsisHorizontalCircleIcon },

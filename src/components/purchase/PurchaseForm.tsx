@@ -9,6 +9,11 @@ interface Product {
     name: string;
 }
 
+interface Category {
+    id: string;
+    name: string;
+}
+
 interface PurchaseFormProps {
     onSuccess?: () => void;
 }
@@ -22,17 +27,25 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({ onSuccess }) => {
     // Form State
     const [isNewProduct, setIsNewProduct] = useState(false);
     const [newProductName, setNewProductName] = useState('');
+    const [selectedCategoryId, setSelectedCategoryId] = useState('');
     const [selectedProductId, setSelectedProductId] = useState('');
+    const [categories, setCategories] = useState<Category[]>([]);
     const [quantity, setQuantity] = useState<number>(0);
     const [unitPrice, setUnitPrice] = useState<number>(0);
     const [supplierName, setSupplierName] = useState('');
 
     useEffect(() => {
         fetchProducts();
+        fetchCategories();
     }, []);
 
+    const fetchCategories = async () => {
+        const { data } = await supabase.from('categories').select('*');
+        if (data) setCategories(data);
+    };
+
     const fetchProducts = async () => {
-        setLoading(true); // Hier wird loading jetzt benutzt!
+        setLoading(true);
         const { data } = await supabase
             .from('products')
             .select('id, name')
@@ -44,7 +57,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({ onSuccess }) => {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        if ((isNewProduct ? !newProductName : !selectedProductId) || quantity <= 0 || unitPrice <= 0) {
+        if ((isNewProduct ? (!newProductName || !selectedCategoryId) : !selectedProductId) || quantity <= 0 || unitPrice <= 0) {
             alert('Bitte alle Felder ausfüllen!');
             return;
         }
@@ -67,7 +80,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({ onSuccess }) => {
                 } else {
                     const { data: newProd, error: pErr } = await supabase
                         .from('products')
-                        .insert({ name: trimmedName })
+                        .insert({ name: trimmedName, category_id: selectedCategoryId, vat_rate: 0 })
                         .select()
                         .single();
                     if (pErr) throw pErr;
@@ -146,7 +159,17 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({ onSuccess }) => {
                     </button>
                 </div>
                 {isNewProduct ? (
-                    <Input value={newProductName} onChange={e => setNewProductName(e.target.value)} placeholder="Name der neuen Ware..." />
+                    <div className="space-y-3">
+                        <Input value={newProductName} onChange={e => setNewProductName(e.target.value)} placeholder="Name der neuen Ware..." />
+                        <select
+                            value={selectedCategoryId}
+                            onChange={e => setSelectedCategoryId(e.target.value)}
+                            className="w-full p-2 border rounded-lg"
+                        >
+                            <option value="">-- Kategorie wählen --</option>
+                            {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        </select>
+                    </div>
                 ) : (
                     <select
                         value={selectedProductId}

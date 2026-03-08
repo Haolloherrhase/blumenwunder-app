@@ -5,7 +5,7 @@ import InventoryItemCard from '../components/inventory/InventoryItemCard';
 import AddProductModal from '../components/inventory/AddProductModal';
 import { PlusIcon } from '@heroicons/react/24/outline';
 
-type Tab = 'products' | 'materials';
+type Tab = 'Schnittblumen' | 'Topfpflanzen' | 'Dekoration' | 'Materialien';
 
 interface ProductItem {
     id: string; // This is the inventory ID
@@ -21,12 +21,11 @@ interface ProductItem {
 }
 
 const Inventory = () => {
-    const [activeTab, setActiveTab] = useState<Tab>('products');
+    const [activeTab, setActiveTab] = useState<Tab>('Schnittblumen');
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
     // Data
     const [products, setProducts] = useState<ProductItem[]>([]);
-    const [materials, setMaterials] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
     const fetchData = async () => {
@@ -51,14 +50,7 @@ const Inventory = () => {
             if (invError) throw invError;
             setProducts(invData as any || []);
 
-            // 2. Fetch Materials
-            const { data: matData, error: matError } = await supabase
-                .from('materials')
-                .select('*')
-                .order('name');
 
-            if (matError) throw matError;
-            setMaterials(matData || []);
 
         } catch (error) {
             console.error('Error fetching inventory:', error);
@@ -102,65 +94,52 @@ const Inventory = () => {
             </div>
 
             {/* Tabs */}
-            <div className="flex space-x-1 bg-gray-100 p-1 rounded-xl">
-                <button
-                    onClick={() => setActiveTab('products')}
-                    className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${activeTab === 'products' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-                        }`}
-                >
-                    Blumen & Pflanzen
-                </button>
-                <button
-                    onClick={() => setActiveTab('materials')}
-                    className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${activeTab === 'materials' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-                        }`}
-                >
-                    Materialien
-                </button>
+            <div className="flex space-x-1 bg-gray-100 p-1 rounded-xl overflow-x-auto scrollbar-hide">
+                {(['Schnittblumen', 'Topfpflanzen', 'Dekoration', 'Materialien'] as Tab[]).map((tab) => (
+                    <button
+                        key={tab}
+                        onClick={() => setActiveTab(tab)}
+                        className={`flex-1 min-w-[100px] py-2 px-2 text-xs font-medium rounded-lg transition-all ${activeTab === tab ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                            }`}
+                    >
+                        {tab}
+                    </button>
+                ))}
             </div>
 
             {/* Content */}
             <div className="space-y-4">
                 {loading ? (
                     <div className="text-center py-10 text-gray-400">Lade Inventar...</div>
-                ) : activeTab === 'products' ? (
-                    products.length === 0 ? (
-                        <div className="text-center py-10 text-gray-500">
-                            Noch keine Produkte angelegt.<br />
-                            Klicke auf "Neu" um zu starten.
-                        </div>
-                    ) : (
-                        products.map(item => (
-                            <InventoryItemCard
-                                key={item.id}
-                                id={item.id}
-                                name={item.products?.name || 'Unbekannt'}
-                                quantity={item.quantity}
-                                unitPrice={item.unit_purchase_price}
-                                categoryName={item.products?.categories?.name} // Note: select keys match structure
-                                onUpdateQuantity={(q) => updateQuantity(item.id, q)}
-                            />
-                        ))
-                    )
                 ) : (
-                    materials.map(mat => (
-                        <div key={mat.id} className="bg-white p-4 rounded-xl shadow-sm border border-neutral-200 flex justify-between items-center">
-                            <div>
-                                <h3 className="font-semibold text-gray-900">{mat.name}</h3>
-                                <p className="text-sm text-gray-500">
-                                    {new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(mat.unit_price)}
-                                </p>
+                    (() => {
+                        const filteredProducts = products.filter(item => item.products?.categories?.name === activeTab);
+
+                        return filteredProducts.length === 0 ? (
+                            <div className="text-center py-10 text-gray-500">
+                                Noch keine Produkte in dieser Kategorie.<br />
+                                Klicke auf "Neu" um zu starten.
                             </div>
-                            <span className="text-xs bg-gray-100 text-gray-500 px-2 py-1 rounded">Material</span>
-                        </div>
-                    ))
+                        ) : (
+                            filteredProducts.map(item => (
+                                <InventoryItemCard
+                                    key={item.id}
+                                    id={item.id}
+                                    name={item.products?.name || 'Unbekannt'}
+                                    quantity={item.quantity}
+                                    unitPrice={item.unit_purchase_price}
+                                    categoryName={item.products?.categories?.name} // Note: select keys match structure
+                                    onUpdateQuantity={(q) => updateQuantity(item.id, q)}
+                                />
+                            ))
+                        );
+                    })()
                 )}
             </div>
 
             <AddProductModal
                 isOpen={isAddModalOpen}
                 onClose={() => setIsAddModalOpen(false)}
-                type={activeTab === 'products' ? 'product' : 'material'}
                 onSuccess={fetchData}
             />
         </div>

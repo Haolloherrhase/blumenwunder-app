@@ -111,18 +111,11 @@ const More = () => {
                 'Typ',
                 'Menge',
                 'Einzelpreis (€)',
-                'Gesamt (Brutto €)',
-                'MwSt-Satz (%)',
-                'MwSt-Betrag (€)',
-                'Netto (€)',
+                'Gesamt (€)',
                 'Zahlungsart'
             ];
 
             const rows = transactions.map(t => {
-                const vatRate = t.vat_rate || (t.transaction_type === 'sale_bouquet' ? 7 : 19);
-                const vatAmount = t.vat_amount || 0;
-                const netPrice = t.total_price - vatAmount;
-
                 return [
                     new Date(t.created_at).toLocaleDateString('de-DE'),
                     t.products?.name || 'Unbekannt',
@@ -131,9 +124,6 @@ const More = () => {
                     t.quantity,
                     t.unit_price.toFixed(2),
                     t.total_price.toFixed(2),
-                    vatRate,
-                    vatAmount.toFixed(2),
-                    netPrice.toFixed(2),
                     t.payment_method || '-'
                 ];
             });
@@ -297,18 +287,6 @@ const More = () => {
                 )}
             </Card>
 
-            {/* Material-Bibliothek */}
-            <div onClick={() => navigate('/materials')} className="cursor-pointer">
-                <Card className="hover:bg-gray-50 transition-colors border-l-4 border-l-primary">
-                    <div className="flex justify-between items-center">
-                        <div>
-                            <h3 className="font-semibold text-gray-900">📦 Material-Bibliothek</h3>
-                            <p className="text-sm text-gray-500">Kordel, Folie und Zubehör verwalten</p>
-                        </div>
-                        <span className="text-gray-400">&rarr;</span>
-                    </div>
-                </Card>
-            </div>
         </div>
     );
 };

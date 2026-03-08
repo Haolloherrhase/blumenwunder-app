@@ -8,12 +8,9 @@ import Login from './pages/Login';
 import Signup from './pages/Signup';
 import Dashboard from './pages/Dashboard';
 import Purchase from './pages/Purchase';
-import Sale from './pages/Sale';
-import Bouquet from './pages/Bouquet';
 import Inventory from './pages/Inventory';
 import More from './pages/More';
 import Waste from './pages/Waste';
-import Materials from './pages/Materials';
 import Analytics from './pages/Analytics';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -56,12 +53,9 @@ function App() {
                     {/* Protected Routes */}
                     <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
                     <Route path="/purchase" element={<ProtectedRoute><Purchase /></ProtectedRoute>} />
-                    <Route path="/sale" element={<ProtectedRoute><Sale /></ProtectedRoute>} />
-                    <Route path="/bouquet" element={<ProtectedRoute><Bouquet /></ProtectedRoute>} />
                     <Route path="/inventory" element={<ProtectedRoute><Inventory /></ProtectedRoute>} />
                     <Route path="/more" element={<ProtectedRoute><More /></ProtectedRoute>} />
                     <Route path="/waste" element={<ProtectedRoute><Waste /></ProtectedRoute>} />
-                    <Route path="/materials" element={<ProtectedRoute><Materials /></ProtectedRoute>} />
                     <Route path="/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
 
                     {/* Root Redirect */}
