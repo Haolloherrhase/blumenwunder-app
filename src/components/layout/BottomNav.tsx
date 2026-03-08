@@ -4,6 +4,7 @@ import {
     HomeIcon,
     PlusCircleIcon,
     ArchiveBoxIcon,
+    ClipboardDocumentListIcon,
     ChartBarIcon,
     EllipsisHorizontalCircleIcon
 } from '@heroicons/react/24/outline';
@@ -13,6 +14,7 @@ const BottomNav = () => {
         { name: 'Dashboard', path: '/dashboard', icon: HomeIcon },
         { name: 'Einkauf', path: '/purchase', icon: PlusCircleIcon },
         { name: 'Bestand', path: '/inventory', icon: ArchiveBoxIcon },
+        { name: 'Bestellungen', path: '/orders', icon: ClipboardDocumentListIcon },
         { name: 'Analyse', path: '/analytics', icon: ChartBarIcon },
         { name: 'Mehr', path: '/more', icon: EllipsisHorizontalCircleIcon },
     ];

@@ -1,8 +1,10 @@
 import { useEffect, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import SaleEntryModal from '../components/dashboard/SaleEntryModal';
 import ReceiptModal from '../components/dashboard/ReceiptModal';
+import { Order } from './Orders';
 
 // ── Categories ──────────────────────────────────────────────
 const CATEGORIES = [
@@ -45,8 +47,45 @@ const getTodayStart = () => {
 const getCategoryLabel = (id: string) =>
     CATEGORIES.find(c => c.id === id)?.label ?? id;
 
+// ── WeekStrip Component ─────────────────────────────────────
+const WeekStrip = ({ orders }: { orders: Order[] }) => {
+    const days = Array.from({ length: 7 }, (_, i) => {
+        const d = new Date();
+        d.setDate(d.getDate() + i);
+        return d;
+    });
+
+    return (
+        <div className="flex justify-between mt-4 mb-2">
+            {days.map((day, i) => {
+                const dateStr = day.toISOString().split('T')[0];
+                const dayOrders = orders.filter(o => o.pickup_date === dateStr);
+                const isToday = i === 0;
+
+                return (
+                    <div key={i} className={`flex flex-col items-center px-2 py-2 rounded-xl border border-transparent ${isToday ? 'bg-primary/10 border-primary/20 shadow-sm' : ''
+                        }`}>
+                        <span className={`text-[10px] uppercase font-bold ${isToday ? 'text-primary' : 'text-gray-400'}`}>
+                            {day.toLocaleDateString('de-DE', { weekday: 'short' })}
+                        </span>
+                        <span className={`text-sm font-black mt-0.5 ${isToday ? 'text-primary-dark' : 'text-gray-700'}`}>
+                            {day.getDate()}
+                        </span>
+                        <div className="h-2 mt-1 flex items-center justify-center">
+                            {dayOrders.length > 0 && (
+                                <span className="w-1.5 h-1.5 rounded-full bg-primary" />
+                            )}
+                        </div>
+                    </div>
+                );
+            })}
+        </div>
+    );
+};
+
 // ── Dashboard Component ─────────────────────────────────────
 const Dashboard = () => {
+    const navigate = useNavigate();
     const { user } = useAuth();
     const [sales, setSales] = useState<DaySale[]>([]);
     const [totalSales, setTotalSales] = useState(0);
@@ -61,6 +100,7 @@ const Dashboard = () => {
         store_address: '',
         starting_balance: 200
     });
+    const [upcomingOrders, setUpcomingOrders] = useState<Order[]>([]);
 
     // Fetch today's data
     const fetchTodayData = useCallback(async () => {
@@ -92,6 +132,24 @@ const Dashboard = () => {
             setSales(salesRows);
             setTotalSales(salesRows.reduce((s, t) => s + Number(t.total_price), 0));
             setTotalPurchases(purchaseRows.reduce((s, t) => s + Number(t.total_price), 0));
+
+            // Upcoming Orders
+            const todayStr = dayStart.split('T')[0];
+            const nextWeek = new Date();
+            nextWeek.setDate(nextWeek.getDate() + 6);
+            const nextWeekStr = nextWeek.toISOString().split('T')[0];
+
+            const { data: ordersData, error: ordersError } = await supabase
+                .from('orders')
+                .select('*')
+                .in('status', ['offen', 'fertig'])
+                .gte('pickup_date', todayStr)
+                .lte('pickup_date', nextWeekStr)
+                .order('pickup_date', { ascending: true });
+
+            if (!ordersError && ordersData) {
+                setUpcomingOrders(ordersData as unknown as Order[]);
+            }
         } catch (err) {
             console.error('Error fetching dashboard data:', err);
         } finally {
@@ -230,6 +288,78 @@ const Dashboard = () => {
                             )}
                         </div>
                     )}
+                </div>
+
+                {/* ──── Kommende Bestellungen (Kalender Widget) ──── */}
+                <div className="backdrop-blur-xl bg-white/70 rounded-3xl p-5 shadow-lg border border-white/30">
+                    <h2 className="text-sm font-bold text-gray-800 flex items-center gap-2">
+                        📅 Kommende Bestellungen
+                    </h2>
+
+                    <WeekStrip orders={upcomingOrders} />
+
+                    <div className="space-y-3 mt-3">
+                        {(() => {
+                            const todayStr = new Date().toISOString().split('T')[0];
+                            const tomorrow = new Date();
+                            tomorrow.setDate(tomorrow.getDate() + 1);
+                            const tomorrowStr = tomorrow.toISOString().split('T')[0];
+
+                            const todayOrders = upcomingOrders.filter(o => o.pickup_date === todayStr);
+                            const tomorrowOrders = upcomingOrders.filter(o => o.pickup_date === tomorrowStr);
+
+                            return (
+                                <>
+                                    {todayOrders.length > 0 && (
+                                        <div>
+                                            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 border-b border-gray-100 pb-1">Heute</p>
+                                            <ul className="space-y-2">
+                                                {todayOrders.map(o => (
+                                                    <li key={o.id} className="text-sm flex items-start gap-2 bg-white/50 p-2 rounded-xl border border-gray-100">
+                                                        <span className="font-bold text-gray-700 min-w-10 mt-0.5">{o.pickup_time || '—'}</span>
+                                                        <div className="flex-1">
+                                                            <span className="font-semibold text-gray-800">{o.customer_name}</span>
+                                                            <span className="text-gray-500 block text-xs">{o.description}</span>
+                                                        </div>
+                                                        <span className="font-bold text-primary">{formatCurrency(o.total_price)}</span>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                    )}
+
+                                    {tomorrowOrders.length > 0 && (
+                                        <div className="mt-4">
+                                            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 border-b border-gray-100 pb-1">Morgen</p>
+                                            <ul className="space-y-2">
+                                                {tomorrowOrders.map(o => (
+                                                    <li key={o.id} className="text-sm flex items-start gap-2 bg-white/50 p-2 rounded-xl border border-gray-100">
+                                                        <span className="font-bold text-gray-700 min-w-10 mt-0.5">{o.pickup_time || '—'}</span>
+                                                        <div className="flex-1">
+                                                            <span className="font-semibold text-gray-800">{o.customer_name}</span>
+                                                            <span className="text-gray-500 block text-xs">{o.description}</span>
+                                                        </div>
+                                                        <span className="font-bold text-primary">{formatCurrency(o.total_price)}</span>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                    )}
+
+                                    {todayOrders.length === 0 && tomorrowOrders.length === 0 && (
+                                        <p className="text-xs text-gray-400 text-center py-2">Keine Bestellungen für heute oder morgen.</p>
+                                    )}
+                                </>
+                            );
+                        })()}
+                    </div>
+
+                    <button
+                        onClick={() => navigate('/orders')}
+                        className="w-full mt-4 text-xs font-bold text-primary bg-primary/10 hover:bg-primary/20 py-2.5 rounded-xl transition-colors"
+                    >
+                        → Alle Bestellungen anzeigen
+                    </button>
                 </div>
 
                 {/* ──── Tagesliste ──── */}

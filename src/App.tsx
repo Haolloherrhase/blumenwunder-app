@@ -9,6 +9,7 @@ import Signup from './pages/Signup';
 import Dashboard from './pages/Dashboard';
 import Purchase from './pages/Purchase';
 import Inventory from './pages/Inventory';
+import Orders from './pages/Orders';
 import More from './pages/More';
 import Waste from './pages/Waste';
 import Analytics from './pages/Analytics';
@@ -54,6 +55,7 @@ function App() {
                     <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
                     <Route path="/purchase" element={<ProtectedRoute><Purchase /></ProtectedRoute>} />
                     <Route path="/inventory" element={<ProtectedRoute><Inventory /></ProtectedRoute>} />
+                    <Route path="/orders" element={<ProtectedRoute><Orders /></ProtectedRoute>} />
                     <Route path="/more" element={<ProtectedRoute><More /></ProtectedRoute>} />
                     <Route path="/waste" element={<ProtectedRoute><Waste /></ProtectedRoute>} />
                     <Route path="/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
