@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import jsPDF from 'jspdf';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeftIcon, PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
 import { supabase } from '../lib/supabase';
@@ -65,21 +66,7 @@ const Quote = () => {
 
     const total = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
 
-    const handleShare = async () => {
-        if (items.length === 0) {
-            alert('Bitte mindestens eine Position hinzufügen.');
-            return;
-        }
-
-        const { data: settings } = await supabase
-            .from('settings')
-            .select('store_name, store_address')
-            .eq('user_id', user?.id)
-            .maybeSingle();
-
-        const storeName = settings?.store_name || 'Blumenwunder';
-        const storeAddress = settings?.store_address || '';
-
+    const generateTextVersion = (storeName: string, storeAddress: string): string => {
         const dateFormatted = weddingDate
             ? new Date(weddingDate).toLocaleDateString('de-DE', { day: '2-digit', month: 'long', year: 'numeric' })
             : 'Nach Absprache';
@@ -89,10 +76,10 @@ const Quote = () => {
             if (item.quantity === 1) {
                 return `${item.name}: ${formatCurrency(item.unitPrice)}`;
             }
-            return `${item.name} (${item.quantity}x á ${formatCurrency(item.unitPrice)}): ${formatCurrency(lineTotal)}`;
+            return `${item.name} (${item.quantity}x à ${formatCurrency(item.unitPrice)}): ${formatCurrency(lineTotal)}`;
         }).join('\n');
 
-        const quoteText = `
+        return `
 ${storeName}
 ${storeAddress}
 
@@ -110,29 +97,190 @@ GESAMT: ${formatCurrency(total)}
 Gemäß §19 UStG wird keine Umsatzsteuer berechnet.
 
 Dieser Kostenvoranschlag ist unverbindlich und 30 Tage gültig.
-Änderungen an den Positionen sind nach Absprache möglich.
-
-Bei Fragen stehe ich gerne zur Verfügung!
 
 Mit freundlichen Grüßen
 ${storeName}
         `.trim();
+    };
 
-        if (navigator.share) {
-            try {
-                await navigator.share({
-                    title: `Kostenvoranschlag Hochzeit — ${customerName || 'Kunde'}`,
-                    text: quoteText,
-                });
-                return;
-            } catch (e) {
-                console.error("Native share failed:", e);
-            }
+    const generatePDF = (storeName: string, storeAddress: string): jsPDF => {
+        const doc = new jsPDF('p', 'mm', 'a4'); // Portrait, Millimeter, A4
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const margin = 20;
+        const contentWidth = pageWidth - margin * 2;
+        let y = margin; // aktuelle Y-Position
+
+        // ── Header: Ladenname & Adresse ──
+        doc.setFontSize(20);
+        doc.setFont('helvetica', 'bold');
+        doc.text(storeName, margin, y);
+        y += 8;
+
+        if (storeAddress) {
+            doc.setFontSize(10);
+            doc.setFont('helvetica', 'normal');
+            // Adresse kann mehrzeilig sein
+            const addressLines = storeAddress.split('\n');
+            addressLines.forEach(line => {
+                doc.text(line.trim(), margin, y);
+                y += 5;
+            });
         }
 
-        const subject = encodeURIComponent(`Kostenvoranschlag Hochzeitsfloristik — ${storeName}`);
-        const body = encodeURIComponent(quoteText);
-        window.location.href = `mailto:?subject=${subject}&body=${body}`;
+        // ── Trennlinie ──
+        y += 5;
+        doc.setDrawColor(200, 200, 200);
+        doc.setLineWidth(0.5);
+        doc.line(margin, y, pageWidth - margin, y);
+        y += 10;
+
+        // ── Titel ──
+        doc.setFontSize(16);
+        doc.setFont('helvetica', 'bold');
+        doc.text('Kostenvoranschlag — Hochzeitsfloristik', margin, y);
+        y += 10;
+
+        // ── Kundendaten ──
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'normal');
+        if (customerName) {
+            doc.text(`Kunde: ${customerName}`, margin, y);
+            y += 6;
+        }
+        if (weddingDate) {
+            const dateFormatted = new Date(weddingDate).toLocaleDateString('de-DE', {
+                day: '2-digit', month: 'long', year: 'numeric'
+            });
+            doc.text(`Hochzeitsdatum: ${dateFormatted}`, margin, y);
+            y += 6;
+        }
+        doc.text(`Erstellt am: ${new Date().toLocaleDateString('de-DE')}`, margin, y);
+        y += 12;
+
+        // ── Tabelle: Positionen ──
+        // Tabellenkopf
+        doc.setFillColor(245, 245, 245);
+        doc.rect(margin, y - 4, contentWidth, 8, 'F');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(9);
+        doc.text('Position', margin + 2, y);
+        doc.text('Menge', margin + 95, y, { align: 'center' });
+        doc.text('Einzelpreis', margin + 120, y, { align: 'center' });
+        doc.text('Gesamt', pageWidth - margin - 2, y, { align: 'right' });
+        y += 8;
+
+        // Tabellenzeilen
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(10);
+
+        items.forEach(item => {
+            const lineTotal = item.quantity * item.unitPrice;
+
+            // Prüfe ob neue Seite nötig
+            if (y > 260) {
+                doc.addPage();
+                y = margin;
+            }
+
+            doc.text(item.name, margin + 2, y);
+            doc.text(String(item.quantity), margin + 95, y, { align: 'center' });
+            doc.text(formatCurrency(item.unitPrice), margin + 120, y, { align: 'center' });
+            doc.text(formatCurrency(lineTotal), pageWidth - margin - 2, y, { align: 'right' });
+
+            // Trennlinie
+            y += 2;
+            doc.setDrawColor(230, 230, 230);
+            doc.setLineWidth(0.2);
+            doc.line(margin, y, pageWidth - margin, y);
+            y += 6;
+        });
+
+        // ── Gesamtpreis ──
+        y += 4;
+        doc.setDrawColor(100, 100, 100);
+        doc.setLineWidth(0.5);
+        doc.line(margin + 100, y, pageWidth - margin, y);
+        y += 8;
+
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        doc.text('Gesamt:', margin + 100, y);
+        doc.text(formatCurrency(total), pageWidth - margin - 2, y, { align: 'right' });
+        y += 14;
+
+        // ── Kleinunternehmer-Hinweis ──
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'italic');
+        doc.setTextColor(120, 120, 120);
+        doc.text('Gemäß §19 UStG wird keine Umsatzsteuer berechnet.', margin, y);
+        y += 10;
+
+        // ── Fußtext ──
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.setTextColor(100, 100, 100);
+        doc.text('Dieser Kostenvoranschlag ist unverbindlich und 30 Tage gültig.', margin, y);
+        y += 5;
+        doc.text('Änderungen an den Positionen sind nach Absprache möglich.', margin, y);
+        y += 8;
+        doc.text('Bei Fragen stehe ich gerne zur Verfügung!', margin, y);
+        y += 8;
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(0, 0, 0);
+        doc.text(`Mit freundlichen Grüßen — ${storeName}`, margin, y);
+
+        return doc;
+    };
+
+    const handleShare = async () => {
+        if (items.length === 0) {
+            alert('Bitte mindestens eine Position hinzufügen.');
+            return;
+        }
+
+        // Lade Laden-Infos
+        const { data: settings } = await supabase
+            .from('settings')
+            .select('store_name, store_address')
+            .eq('user_id', user?.id)
+            .maybeSingle();
+
+        const storeName = settings?.store_name || 'Blumenwunder';
+        const storeAddress = settings?.store_address || '';
+
+        try {
+            // PDF generieren
+            const doc = generatePDF(storeName, storeAddress);
+            const pdfBlob = doc.output('blob');
+            const fileName = `Kostenvoranschlag_${customerName || 'Hochzeit'}_${new Date().toISOString().split('T')[0]}.pdf`;
+
+            // Versuch 1: Native Share mit PDF-Datei (Handy)
+            if (navigator.share && navigator.canShare) {
+                const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
+                const shareData = { files: [file], title: `Kostenvoranschlag — ${customerName || 'Hochzeit'}` };
+
+                if (navigator.canShare(shareData)) {
+                    try {
+                        await navigator.share(shareData);
+                        return;
+                    } catch (e) {
+                        // User hat abgebrochen — weiter zum Fallback
+                    }
+                }
+            }
+
+            // Versuch 2: PDF herunterladen
+            doc.save(fileName);
+
+        } catch (e) {
+            console.error('PDF generation failed, falling back to text:', e);
+
+            // Fallback: Text per E-Mail
+            const quoteText = generateTextVersion(storeName, storeAddress);
+            const subject = encodeURIComponent(`Kostenvoranschlag Hochzeitsfloristik — ${storeName}`);
+            const body = encodeURIComponent(quoteText);
+            window.location.href = `mailto:?subject=${subject}&body=${body}`;
+        }
     };
 
     return (
@@ -282,9 +430,9 @@ ${storeName}
                 </div>
                 <button
                     onClick={handleShare}
-                    className="w-full bg-gray-900 text-white font-bold py-4 rounded-2xl shadow-xl hover:bg-black hover:-translate-y-0.5 transition-all text-lg flex items-center justify-center gap-2"
+                    className="w-full py-4 rounded-2xl bg-gradient-to-r from-primary to-primary-dark text-white font-bold text-lg hover:shadow-lg transition-all flex items-center justify-center gap-2"
                 >
-                    📤 Als PDF / E-Mail teilen
+                    📤 PDF erstellen & teilen
                 </button>
             </div>
         </div>
