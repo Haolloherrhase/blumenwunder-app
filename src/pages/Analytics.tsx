@@ -12,6 +12,10 @@ interface AnalyticsData {
     revenueByDay: any[];
     paymentMethods: any[];
     topCategories: any[];
+    totalRevenue: number;
+    totalProfit: number;
+    bestandsUmsatz: number;
+    freiUmsatz: number;
 }
 
 const Analytics = () => {
@@ -35,6 +39,9 @@ const Analytics = () => {
                     created_at,
                     payment_method,
                     transaction_type,
+                    product_id,
+                    purchase_price,
+                    quantity,
                     products (
                         categories (name)
                     )
@@ -49,11 +56,27 @@ const Analytics = () => {
             const payMap: Record<string, number> = { cash: 0, card: 0 };
             const catMap: Record<string, number> = {};
 
+            let totalRevenue = 0;
+            let totalProfit = 0;
+            let bestandsUmsatz = 0;
+            let freiUmsatz = 0;
+
             txs?.forEach(t => {
                 const date = new Date(t.created_at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
                 const gross = Number(t.total_price);
                 const payMethod = t.payment_method || 'cash';
                 const catName = (t as any).products?.categories?.name || (t.transaction_type === 'sale_bouquet' ? 'Sträuße' : 'Sonstiges');
+
+                totalRevenue += gross;
+
+                if (t.product_id && t.purchase_price) {
+                    const einkauf = Number(t.purchase_price) * (Number(t.quantity) || 1);
+                    const gewinn = gross - einkauf;
+                    totalProfit += gewinn;
+                    bestandsUmsatz += gross;
+                } else {
+                    freiUmsatz += gross;
+                }
 
                 // Revenue by Day
                 dayMap[date] = (dayMap[date] || 0) + gross;
@@ -75,7 +98,15 @@ const Analytics = () => {
                 .map(([name, value]) => ({ name, value }))
                 .sort((a, b) => b.value - a.value);
 
-            setData({ revenueByDay, paymentMethods, topCategories });
+            setData({
+                revenueByDay,
+                paymentMethods,
+                topCategories,
+                totalRevenue,
+                totalProfit,
+                bestandsUmsatz,
+                freiUmsatz
+            });
         } catch (err) {
             console.error('Analytics error:', err);
         } finally {
@@ -86,9 +117,37 @@ const Analytics = () => {
     if (loading) return <div className="p-8 text-center text-gray-500">Analysedaten werden geladen...</div>;
     if (!data) return <div className="p-8 text-center text-red-500">Fehler beim Laden der Analysedaten.</div>;
 
+    const formatCurrency = (amount: number) =>
+        new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(amount);
+
     return (
         <div className="space-y-6 pb-24">
             <h1 className="text-2xl font-bold text-gray-800">Berichte & Analyse</h1>
+
+            {/* Zusammenfassung Card */}
+            <Card title="Zusammenfassung (30 Tage)">
+                <div className="space-y-3 py-2">
+                    <div className="flex justify-between items-center">
+                        <span className="text-sm text-gray-600">Umsatz gesamt</span>
+                        <span className="text-lg font-bold text-gray-800">{formatCurrency(data.totalRevenue)}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm">
+                        <span className="text-gray-500">davon aus Bestand</span>
+                        <span className="text-gray-600">{formatCurrency(data.bestandsUmsatz)}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm">
+                        <span className="text-gray-500">davon Freiverkauf</span>
+                        <span className="text-gray-600">{formatCurrency(data.freiUmsatz)}</span>
+                    </div>
+                    <div className="border-t border-gray-200 pt-3 flex justify-between items-center">
+                        <span className="text-sm font-semibold text-gray-700">💰 Gewinn</span>
+                        <span className={`text-lg font-bold ${data.totalProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {formatCurrency(data.totalProfit)}
+                        </span>
+                    </div>
+                    <p className="text-xs text-gray-400">Gewinn = Verkaufspreis − Einkaufspreis (nur Bestandsverkäufe)</p>
+                </div>
+            </Card>
 
             {/* Revenue Trend */}
             <Card title="Umsatzverlauf (30 Tage)">

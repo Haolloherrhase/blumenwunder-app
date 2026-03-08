@@ -120,69 +120,6 @@ const Dashboard = () => {
         if (user?.id) fetchStoreSettings();
     }, [user?.id]);
 
-    // Save sale (quick-sale or from inventory)
-    const handleSaveSale = async (entry: {
-        category: CategoryId;
-        amount: number;
-        description: string;
-        inventoryId?: string;
-        productId?: string;
-        quantity?: number;
-    }) => {
-        const qty = entry.quantity || 1;
-        const totalPrice = entry.amount * qty;
-
-        // 1. Save transaction
-        const { error } = await supabase.from('transactions').insert({
-            user_id: user?.id,
-            transaction_type: 'sale',
-            product_id: entry.productId || null,
-            category: entry.category,
-            quantity: qty,
-            unit_price: entry.amount,
-            total_price: totalPrice,
-            payment_method: 'cash',
-            description: entry.description || null,
-            notes: entry.description || null,
-        });
-
-        if (error) throw error;
-
-        // 2. If from inventory: reduce stock
-        if (entry.inventoryId) {
-            const { data: currentInv } = await supabase
-                .from('inventory')
-                .select('quantity')
-                .eq('id', entry.inventoryId)
-                .single();
-
-            if (currentInv) {
-                await supabase
-                    .from('inventory')
-                    .update({ quantity: Math.max(0, currentInv.quantity - qty) })
-                    .eq('id', entry.inventoryId);
-            }
-        }
-
-        // 3. Refresh dashboard
-        await fetchTodayData();
-
-        // 4. Prepare receipt data for the last sale
-        setReceiptSale({
-            id: '',
-            category: entry.category as CategoryId,
-            total_price: totalPrice,
-            description: entry.description || null,
-            notes: entry.description || null,
-            created_at: new Date().toISOString(),
-            product_id: entry.productId || null,
-            quantity: qty,
-            transaction_type: 'sale',
-            payment_method: 'cash',
-        });
-        setIsReceiptOpen(true);
-    };
-
     // Storno (cancel a sale)
     const handleStorno = async (sale: DaySale) => {
         try {
@@ -420,7 +357,8 @@ const Dashboard = () => {
             <SaleEntryModal
                 isOpen={isModalOpen}
                 onClose={() => setIsModalOpen(false)}
-                onSave={handleSaveSale}
+                onSaleComplete={fetchTodayData}
+                userId={user?.id || ''}
             />
 
             {/* ──── Action Sheet (Quittung / Stornieren) ──── */}
