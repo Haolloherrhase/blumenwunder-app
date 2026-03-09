@@ -253,7 +253,6 @@ const Dashboard = () => {
                 <div className="backdrop-blur-xl bg-white/70 rounded-3xl p-6 shadow-2xl border border-white/30">
                     {/* Date */}
                     <p className="text-sm text-gray-500 mb-1 flex items-center gap-2">
-                        <span>📅</span>
                         <span>{todayFormatted}</span>
                     </p>
 
@@ -293,7 +292,7 @@ const Dashboard = () => {
                 {/* ──── Kommende Bestellungen (Kalender Widget) ──── */}
                 <div className="backdrop-blur-xl bg-white/70 rounded-3xl p-5 shadow-lg border border-white/30">
                     <h2 className="text-sm font-bold text-gray-800 flex items-center gap-2">
-                        📅 Kommende Bestellungen
+                        Kommende Bestellungen
                     </h2>
 
                     <WeekStrip orders={upcomingOrders} />
@@ -477,7 +476,6 @@ const Dashboard = () => {
                         onClick={() => setIsModalOpen(true)}
                         className="w-full py-4 rounded-2xl bg-gradient-to-r from-primary to-primary-dark text-white font-bold text-lg shadow-2xl hover:shadow-3xl active:scale-[0.98] transition-all duration-200 flex items-center justify-center gap-3"
                     >
-                        <span className="text-xl">🛒</span>
                         Verkauf erfassen
                     </button>
                 </div>
