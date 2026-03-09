@@ -6,21 +6,14 @@ import SaleEntryModal from '../components/dashboard/SaleEntryModal';
 import ReceiptModal from '../components/dashboard/ReceiptModal';
 import { Order } from './Orders';
 
-// ── Categories ──────────────────────────────────────────────
-const CATEGORIES = [
-    { id: 'schnittblumen', label: 'Schnittblumen', icon: '✂️' },
-    { id: 'topfpflanzen', label: 'Topfpflanzen', icon: '🪴' },
-    { id: 'deko', label: 'Deko', icon: '🎀' },
-] as const;
 
-type CategoryId = typeof CATEGORIES[number]['id'];
 
 // const STARTING_BALANCE = 200; // Now handled via settings table
 
 // ── Types ───────────────────────────────────────────────────
 interface DaySale {
     id: string;
-    category: CategoryId;
+    category: string;
     total_price: number;
     description: string | null;
     notes: string | null;
@@ -43,9 +36,6 @@ const getTodayStart = () => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
 };
-
-const getCategoryLabel = (id: string) =>
-    CATEGORIES.find(c => c.id === id)?.label ?? id;
 
 // ── WeekStrip Component ─────────────────────────────────────
 const WeekStrip = ({ orders }: { orders: Order[] }) => {
@@ -225,13 +215,6 @@ const Dashboard = () => {
     const currentStartingBalance = Number(storeSettings.starting_balance);
     const kassenstand = currentStartingBalance + totalSales - totalPurchases;
 
-    // Group sales by category
-    const groupedSales = CATEGORIES.map(cat => {
-        const items = sales.filter(s => s.category === cat.id);
-        const subtotal = items.reduce((s, t) => s + Number(t.total_price), 0);
-        return { ...cat, items, subtotal };
-    });
-
     // Today's date formatted
     const todayFormatted = new Date().toLocaleDateString('de-DE', {
         weekday: 'long',
@@ -361,111 +344,52 @@ const Dashboard = () => {
                     </button>
                 </div>
 
-                {/* ──── Tagesliste ──── */}
-                <div className="space-y-4">
-                    {loading ? (
-                        // Skeleton
-                        Array.from({ length: 3 }).map((_, i) => (
-                            <div key={i} className="backdrop-blur-xl bg-white/50 rounded-2xl p-5 shadow-lg border border-white/30">
-                                <div className="h-5 w-32 bg-gray-200 rounded animate-pulse mb-3" />
-                                <div className="h-4 w-full bg-gray-100 rounded animate-pulse mb-2" />
-                                <div className="h-4 w-2/3 bg-gray-100 rounded animate-pulse" />
+                {/* ──── Tagesliste (chronologisch) ──── */}
+                <div className="backdrop-blur-xl bg-white/50 rounded-2xl shadow-lg border border-white/30 overflow-hidden">
+                    <div className="px-5 py-3 bg-white/60 border-b border-gray-100/50">
+                        <h3 className="font-bold text-gray-800">Heutige Verkäufe</h3>
+                    </div>
+                    <div className="px-5 py-2">
+                        {loading ? (
+                            <div className="space-y-2 py-2">
+                                {Array.from({ length: 3 }).map((_, i) => (
+                                    <div key={i} className="h-4 w-full bg-gray-100 rounded animate-pulse" />
+                                ))}
                             </div>
-                        ))
-                    ) : (
-                        groupedSales.map(group => (
-                            <div
-                                key={group.id}
-                                className="backdrop-blur-xl bg-white/50 rounded-2xl shadow-lg border border-white/30 overflow-hidden"
-                            >
-                                {/* Category Header */}
-                                <div className="flex items-center justify-between px-5 py-3 bg-white/60 border-b border-gray-100/50">
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-lg">{group.icon}</span>
-                                        <h3 className="font-bold text-gray-800">{group.label}</h3>
-                                    </div>
-                                    {group.items.length > 0 && (
-                                        <span className="text-sm font-bold text-primary">
-                                            {formatCurrency(group.subtotal)}
-                                        </span>
-                                    )}
-                                </div>
-
-                                {/* Sales Items */}
-                                <div className="px-5 py-2">
-                                    {group.items.length === 0 ? (
-                                        <p className="text-sm text-gray-400 italic py-2">
-                                            Keine Verkäufe
-                                        </p>
-                                    ) : (
-                                        <ul className="divide-y divide-gray-100/70">
-                                            {group.items.map(sale => {
-                                                const isStorno = sale.transaction_type === 'storno';
-                                                return (
-                                                    <li
-                                                        key={sale.id}
-                                                        onClick={() => !isStorno && setSelectedSale(sale)}
-                                                        className={`flex items-center justify-between py-2.5 ${isStorno
-                                                            ? 'opacity-50'
-                                                            : 'cursor-pointer active:bg-gray-50 rounded-lg -mx-2 px-2'
-                                                            }`}
-                                                    >
-                                                        <span className={`text-sm ${isStorno ? 'text-red-400 line-through' : 'text-gray-700'}`}>
-                                                            {sale.description || sale.notes || getCategoryLabel(sale.category)}
-                                                        </span>
-                                                        <span className={`text-sm font-semibold tabular-nums ${isStorno ? 'text-red-400' : 'text-gray-800'}`}>
-                                                            {formatCurrency(Number(sale.total_price))}
-                                                        </span>
-                                                    </li>
-                                                );
-                                            })}
-                                        </ul>
-                                    )}
-                                </div>
-                            </div>
-                        ))
-                    )}
-
-                    {/* Uncategorized sales (from regular /sale page, without category) */}
-                    {!loading && sales.filter(s => !s.category).length > 0 && (
-                        <div className="backdrop-blur-xl bg-white/50 rounded-2xl shadow-lg border border-white/30 overflow-hidden">
-                            <div className="flex items-center justify-between px-5 py-3 bg-white/60 border-b border-gray-100/50">
-                                <div className="flex items-center gap-2">
-                                    <span className="text-lg">📦</span>
-                                    <h3 className="font-bold text-gray-800">Sonstige Verkäufe</h3>
-                                </div>
-                                <span className="text-sm font-bold text-primary">
-                                    {formatCurrency(
-                                        sales.filter(s => !s.category).reduce((sum, s) => sum + Number(s.total_price), 0)
-                                    )}
-                                </span>
-                            </div>
-                            <div className="px-5 py-2">
-                                <ul className="divide-y divide-gray-100/70">
-                                    {sales.filter(s => !s.category).map(sale => {
-                                        const isStorno = sale.transaction_type === 'storno';
-                                        return (
-                                            <li
-                                                key={sale.id}
-                                                onClick={() => !isStorno && setSelectedSale(sale)}
-                                                className={`flex items-center justify-between py-2.5 ${isStorno
-                                                    ? 'opacity-50'
-                                                    : 'cursor-pointer active:bg-gray-50 rounded-lg -mx-2 px-2'
-                                                    }`}
-                                            >
+                        ) : sales.length === 0 ? (
+                            <p className="text-sm text-gray-400 italic py-4 text-center">
+                                Noch keine Verkäufe heute
+                            </p>
+                        ) : (
+                            <ul className="divide-y divide-gray-100/70">
+                                {sales.map(sale => {
+                                    const isStorno = sale.transaction_type === 'storno';
+                                    const time = new Date(sale.created_at).toLocaleTimeString('de-DE', {
+                                        hour: '2-digit', minute: '2-digit'
+                                    });
+                                    return (
+                                        <li
+                                            key={sale.id}
+                                            onClick={() => !isStorno && setSelectedSale(sale)}
+                                            className={`flex items-center justify-between py-3 ${isStorno ? 'opacity-50' : 'cursor-pointer active:bg-gray-50 rounded-lg'
+                                                }`}
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                <span className="text-xs text-gray-400 w-10 shrink-0">{time}</span>
                                                 <span className={`text-sm ${isStorno ? 'text-red-400 line-through' : 'text-gray-700'}`}>
                                                     {sale.description || sale.notes || 'Verkauf'}
                                                 </span>
-                                                <span className={`text-sm font-semibold tabular-nums ${isStorno ? 'text-red-400' : 'text-gray-800'}`}>
-                                                    {formatCurrency(Number(sale.total_price))}
-                                                </span>
-                                            </li>
-                                        );
-                                    })}
-                                </ul>
-                            </div>
-                        </div>
-                    )}
+                                            </div>
+                                            <span className={`text-sm font-semibold tabular-nums ${isStorno ? 'text-red-400' : 'text-gray-800'
+                                                }`}>
+                                                {formatCurrency(Number(sale.total_price))}
+                                            </span>
+                                        </li>
+                                    );
+                                })}
+                            </ul>
+                        )}
+                    </div>
                 </div>
             </div>
 
@@ -498,7 +422,7 @@ const Dashboard = () => {
                     />
                     <div className="relative w-full max-w-md bg-white rounded-t-3xl shadow-2xl p-5 space-y-3 animate-slideUp">
                         <p className="text-sm text-gray-500 text-center mb-2">
-                            {selectedSale.description || selectedSale.notes || getCategoryLabel(selectedSale.category)}
+                            {selectedSale.description || selectedSale.notes || 'Verkauf'}
                             {' — '}
                             {formatCurrency(Number(selectedSale.total_price))}
                         </p>
@@ -533,7 +457,7 @@ const Dashboard = () => {
                 isOpen={isReceiptOpen}
                 onClose={() => { setIsReceiptOpen(false); setReceiptSale(null); }}
                 sale={receiptSale ? {
-                    description: receiptSale.description || receiptSale.notes || getCategoryLabel(receiptSale.category),
+                    description: receiptSale.description || receiptSale.notes || 'Verkauf',
                     total_price: Number(receiptSale.total_price),
                     quantity: receiptSale.quantity || 1,
                     category: receiptSale.category,

@@ -8,6 +8,19 @@ import Card from '../components/ui/Card';
 
 const COLORS = ['#D4A373', '#CCD5AE', '#E9EDC9', '#FEFAE0', '#FAEDCD'];
 
+const CATEGORIES = [
+    { id: 'schnittblumen', label: 'Schnittblumen', icon: '✂️' },
+    { id: 'topfpflanzen', label: 'Topfpflanzen', icon: '🪴' },
+    { id: 'deko', label: 'Deko', icon: '🎀' },
+];
+
+interface CategoryTotal {
+    id: string;
+    label: string;
+    icon: string;
+    total: number;
+}
+
 interface AnalyticsData {
     revenueByDay: any[];
     paymentMethods: any[];
@@ -20,6 +33,7 @@ interface AnalyticsData {
 
 const Analytics = () => {
     const [data, setData] = useState<AnalyticsData | null>(null);
+    const [todayByCategory, setTodayByCategory] = useState<CategoryTotal[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -107,6 +121,24 @@ const Analytics = () => {
                 bestandsUmsatz,
                 freiUmsatz
             });
+
+            // Today-by-category
+            const todayStart = new Date();
+            todayStart.setHours(0, 0, 0, 0);
+
+            const { data: todayTxs } = await supabase
+                .from('transactions')
+                .select('category, total_price')
+                .in('transaction_type', ['sale', 'sale_bouquet'])
+                .gte('created_at', todayStart.toISOString());
+
+            const byCat = CATEGORIES.map(cat => ({
+                ...cat,
+                total: (todayTxs || [])
+                    .filter(t => t.category === cat.id)
+                    .reduce((s, t) => s + Number(t.total_price), 0),
+            }));
+            setTodayByCategory(byCat);
         } catch (err) {
             console.error('Analytics error:', err);
         } finally {
@@ -123,6 +155,29 @@ const Analytics = () => {
     return (
         <div className="space-y-6 pb-24">
             <h1 className="text-2xl font-bold text-gray-800">Berichte & Analyse</h1>
+
+            {/* Heute nach Kategorien */}
+            <Card title="Heute nach Kategorien">
+                <div className="space-y-3 py-2">
+                    {todayByCategory.map(cat => (
+                        <div key={cat.id} className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <span>{cat.icon}</span>
+                                <span className="text-sm text-gray-700">{cat.label}</span>
+                            </div>
+                            <span className="text-sm font-bold text-gray-800">
+                                {formatCurrency(cat.total)}
+                            </span>
+                        </div>
+                    ))}
+                    <div className="border-t border-gray-200 pt-2 flex justify-between">
+                        <span className="text-sm font-bold text-gray-700">Gesamt heute</span>
+                        <span className="text-sm font-bold text-primary">
+                            {formatCurrency(todayByCategory.reduce((s, c) => s + c.total, 0))}
+                        </span>
+                    </div>
+                </div>
+            </Card>
 
             {/* Zusammenfassung Card */}
             <Card title="Zusammenfassung (30 Tage)">
